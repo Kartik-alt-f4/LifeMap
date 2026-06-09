@@ -1,0 +1,307 @@
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { getTasks, completeTask, skipTask, cancelTask, chat } from '../api.js'
+import AddTaskModal from '../components/AddTaskModal.jsx'
+import TaskDrawer   from '../components/TaskDrawer.jsx'
+import CalendarModal from '../components/CalendarModal.jsx'
+
+const TYPE_ICONS = { anchor:'⚓', mandatory:'⚔', project:'📋', bonus:'⭐', habit:'🔄', routine:'🌿' }
+
+function todayStr() { return new Date().toISOString().split('T')[0] }
+
+function formatDate(d) {
+  const date  = new Date(d + 'T00:00:00')
+  const today = new Date(); today.setHours(0,0,0,0)
+  const diff  = Math.round((date - today) / 86400000)
+  if (diff === 0)  return 'Today'
+  if (diff === -1) return 'Yesterday'
+  if (diff === 1)  return 'Tomorrow'
+  return date.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' })
+}
+
+function shiftDate(d, days) {
+  const date = new Date(d + 'T00:00:00')
+  date.setDate(date.getDate() + days)
+  return date.toISOString().split('T')[0]
+}
+
+function computeRewards(task, config) {
+  const g = config?.game
+  if (!g) return { xp: 0, gold: 0 }
+  if (task.task_type === 'routine') return { xp: g.tasks.xp_base.routine, gold: g.tasks.gold_base.routine }
+  const xp   = g.tasks.xp_base[task.task_type] ?? 0
+  const gold  = Math.max(g.tasks.gold_floor,
+    (g.tasks.gold_base[task.task_type] ?? 0) +
+    (g.tasks.difficulty_gold_offset[task.difficulty] ?? 0)
+  )
+  return { xp, gold }
+}
+
+function isUrgent(task) {
+  if (task.status !== 'pending') return false
+  if (task.late_multiplier < 1.0) return true
+  if (task.task_type === 'mandatory') return true
+  return false
+}
+
+export default function Dashboard({ playerState, config, onRefresh }) {
+  const [date,       setDate]       = useState(todayStr())
+  const [tasks,      setTasks]      = useState(null)
+  const [loading,    setLoading]    = useState(true)
+  const [selected,   setSelected]   = useState(null)
+  const [showAdd,    setShowAdd]    = useState(false)
+  const [showCal,    setShowCal]    = useState(false)
+  const [messages,   setMessages]   = useState([])
+  const [chatInput,  setChatInput]  = useState('')
+  const [sending,    setSending]    = useState(false)
+  const messagesEnd = useRef(null)
+  const isToday     = date === todayStr()
+
+  const loadTasks = useCallback(async (d) => {
+    setLoading(true)
+    try {
+      const data = await getTasks(d === todayStr() ? undefined : d)
+      setTasks(data)
+    } catch (e) { console.error(e) }
+    finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => { loadTasks(date) }, [date, loadTasks])
+
+  useEffect(() => {
+    // Listen for Add Task button in navbar
+    const handler = (e) => {
+      if (e.target.dataset.addtask) setShowAdd(true)
+    }
+    document.addEventListener('click', handler)
+    return () => document.removeEventListener('click', handler)
+  }, [])
+
+  useEffect(() => {
+    messagesEnd.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
+
+  const goDate = (days) => setDate(d => shiftDate(d, days))
+
+  const handleComplete = async (taskId) => {
+    try {
+      await completeTask(taskId)
+      await loadTasks(date)
+      await onRefresh()
+      setSelected(null)
+    } catch (e) { console.error(e) }
+  }
+
+  const handleSkip = async (taskId) => {
+    try {
+      await skipTask(taskId)
+      await loadTasks(date)
+      setSelected(null)
+    } catch (e) { console.error(e) }
+  }
+
+  const handleCancel = async (taskId) => {
+    try {
+      await cancelTask(taskId)
+      await loadTasks(date)
+      setSelected(null)
+    } catch (e) { console.error(e) }
+  }
+
+  const sendChat = async () => {
+    if (!chatInput.trim() || sending) return
+    const text = chatInput.trim()
+    setChatInput('')
+    setSending(true)
+    setMessages(m => [...m, { role:'user', text }])
+
+    try {
+      const { reply } = await chat(text)
+      setMessages(m => [...m, { role:'system', text: reply }])
+      await loadTasks(date)
+      await onRefresh()
+    } catch (e) {
+      setMessages(m => [...m, { role:'system', text:`⚠ ${e.message}` }])
+    } finally { setSending(false) }
+  }
+
+  // Next pending task
+  const nextTask = tasks?.find(t => t.status === 'pending')
+  const sorted   = tasks ? [...tasks].sort((a, b) => {
+    if (a.status === 'completed' && b.status !== 'completed') return 1
+    if (a.status !== 'completed' && b.status === 'completed') return -1
+    return 0
+  }) : []
+
+  return (
+    <main className="main">
+      {/* ── LEFT: Task panel ── */}
+      <section className="col" style={{ position:'relative' }}>
+
+        {/* Task drawer overlay */}
+        {selected && (
+          <TaskDrawer
+            task={selected}
+            config={config}
+            isToday={isToday}
+            onComplete={handleComplete}
+            onSkip={handleSkip}
+            onCancel={handleCancel}
+            onClose={() => setSelected(null)}
+            onEdited={() => loadTasks(date)}
+          />
+        )}
+
+        {/* Next task card */}
+        {nextTask ? (
+          <div className="next-card" onClick={() => setSelected(nextTask)} style={{ cursor:'pointer' }}>
+            <div className="next-label">▶ next up</div>
+            <div className="next-title">{nextTask.title}</div>
+            <div className="tags">
+              <span className={`tag tag-${nextTask.task_type}`}>{nextTask.task_type}</span>
+              <span className={`tag tag-${nextTask.priority?.toLowerCase()}`}>{nextTask.priority}</span>
+              {nextTask.difficulty && <span className="tag">{nextTask.difficulty}</span>}
+              {nextTask.time_block  && <span className="tag">{nextTask.time_block}</span>}
+            </div>
+            {config && (() => {
+              const { xp, gold } = computeRewards(nextTask, config)
+              return (
+                <div className="next-rewards">
+                  <span className="reward reward-xp">+{xp} XP</span>
+                  <span className="reward reward-gold">+{gold}g</span>
+                </div>
+              )
+            })()}
+          </div>
+        ) : (
+          <div className="next-card">
+            <div className="next-label">▶ all clear</div>
+            <div className="next-title" style={{ color:'var(--text-muted)' }}>No pending tasks.</div>
+          </div>
+        )}
+
+        {/* Date selector */}
+        <div className="date-selector">
+          <button className="date-nav-btn" onClick={() => goDate(-1)}>‹</button>
+          <button className="date-display" onClick={() => setShowCal(true)}>
+            <span>{formatDate(date)}</span>
+            <span className="cal-icon">📅</span>
+          </button>
+          <button className="date-nav-btn" onClick={() => goDate(1)}>›</button>
+        </div>
+
+        {/* Task list */}
+        <div className="card task-list-card">
+          <div className="card-header">
+            <span className="card-title">Tasks</span>
+            <span className="count-badge">
+              {tasks ? `${tasks.filter(t => t.status === 'pending').length} pending` : '—'}
+            </span>
+          </div>
+          <div className="task-list">
+            {loading ? (
+              [0,1,2].map(i => <div key={i} className="skeleton" />)
+            ) : sorted.length === 0 ? (
+              <div className="empty-state">No tasks for this day.</div>
+            ) : sorted.map(task => {
+              const { xp, gold } = computeRewards(task, config)
+              const done    = task.status === 'completed'
+              const urgent  = isUrgent(task)
+              const carried = task.late_multiplier < 1.0 && !done
+              return (
+                <div
+                  key={task.id}
+                  className={`task-row${done ? ' completed' : urgent ? ' urgent' : carried ? ' carried' : ''}`}
+                  onClick={() => setSelected(task)}
+                >
+                  <span className="task-icon">{done ? '✓' : TYPE_ICONS[task.task_type] ?? '◈'}</span>
+                  <div className="task-body">
+                    <div className="task-title-row">
+                      <span className={`task-name${done ? ' done' : ''}`}>{task.title}</span>
+                      <div className="task-rewards-inline">
+                        <span className="t-reward xp-color">+{xp}</span>
+                        <span className="t-reward gold-color">+{gold}g</span>
+                      </div>
+                    </div>
+                    <div className="task-meta">
+                      <span className="task-type-label">{task.task_type}</span>
+                      {task.time_block && <span className="task-time">{task.time_block}</span>}
+                      {carried && <span className="task-time" style={{ color:'var(--warning)' }}>carried</span>}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* ── RIGHT: Chat panel ── */}
+      <section className="col">
+        <div className="card chat-card">
+          <div className="card-header">
+            <span className="card-title">System interface</span>
+            <span className="chat-session">SESSION: WEB</span>
+          </div>
+
+          <div className="chat-messages">
+            {messages.length === 0 ? (
+              <div className="chat-welcome">
+                <div className="welcome-icon">◈</div>
+                <div className="welcome-text">System online. How can I help?</div>
+              </div>
+            ) : messages.map((m, i) => (
+              <div key={i} className={`message ${m.role}`}>
+                <div className="bubble">{m.text}</div>
+              </div>
+            ))}
+            {sending && (
+              <div className="message system">
+                <div className="bubble">
+                  <div className="typing">
+                    <span/><span/><span/>
+                  </div>
+                </div>
+              </div>
+            )}
+            <div ref={messagesEnd} />
+          </div>
+
+          <div className="chat-input-area">
+            <div className="input-row">
+              <textarea
+                className="chat-input"
+                placeholder="Add a task, mark done, ask anything..."
+                rows={1}
+                value={chatInput}
+                onChange={e => {
+                  setChatInput(e.target.value)
+                  e.target.style.height = 'auto'
+                  e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'
+                }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat() }
+                }}
+              />
+              <button className="send-btn" onClick={sendChat} disabled={sending}>▶</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Modals */}
+      {showAdd && (
+        <AddTaskModal
+          config={config}
+          onClose={() => setShowAdd(false)}
+          onAdded={async () => { setShowAdd(false); await loadTasks(date); await onRefresh() }}
+        />
+      )}
+      {showCal && (
+        <CalendarModal
+          onClose={() => setShowCal(false)}
+          onSelectDate={d => { setDate(d); setShowCal(false) }}
+        />
+      )}
+    </main>
+  )
+}

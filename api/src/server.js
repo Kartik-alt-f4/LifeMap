@@ -3,11 +3,10 @@ import express       from 'express'
 import path          from 'path'
 import { fileURLToPath } from 'url'
 
-import { loadConfig, getServer, writeConfigSection, reloadConfig } from './configLoader.js'
-import { initGemini }    from './agentPipeline.js'
-import { initProjection } from './projectionEngine.js'
-import { initDiscordBot, postToDiscord } from './discordBot.js'
-import { runAgent }      from './agentPipeline.js'
+import { loadConfig, getConfig, getServer, writeConfigSection } from './configLoader.js'
+import { initGemini, runAgent } from './agentPipeline.js'
+import { initProjection, projectTask } from './projectionEngine.js'
+import { initDiscordBot } from './discordBot.js'
 import { executeActions } from './actionExecutor.js'
 import { getHistory, saveExchange, formatForGemini } from './sessionManager.js'
 import { runMorning, runEod, runRemind, runCleanup, checkStreakWarning } from './cronJobs.js'
@@ -18,7 +17,6 @@ import {
   getSnapshots, getCalendar, savePushToken
 } from './dbAgent.js'
 import { calculateCompletion } from './rpgEngine.js'
-import { projectTask }   from './projectionEngine.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -52,9 +50,7 @@ app.get('/health', (_, res) => res.json({ status: 'ok' }))
 // ─────────────────────────────────────────────────────────────────────────────
 app.get('/config', (_, res) => {
   try {
-    const { getConfig } = await import('./configLoader.js')
     const { game, agent } = getConfig()
-    // Return only what the frontend needs
     res.json({ game, agent: { scheduling: agent.scheduling, persona: { reply_templates: agent.persona.reply_templates } } })
   } catch (e) { res.status(500).json({ error: e.message }) }
 })
@@ -96,18 +92,39 @@ app.patch('/tasks/:id', async (req, res) => {
 
 app.post('/tasks/:id/complete', async (req, res) => {
   try {
-    const taskId      = parseInt(req.params.id)
-    const today       = new Date().toISOString().split('T')[0]
-    const tasks       = await getTasksForDate(today)
-    const task        = tasks.find(t => t.id === taskId)
-    if (!task) return res.status(404).json({ error: 'Task not found' })
-    const playerState = await getPlayerState()
-    const calc        = calculateCompletion(task, playerState)
-    const result      = await completeTask(taskId, calc)
-    // Async projection — non-blocking
+    const taskId = parseInt(req.params.id)
+    if (isNaN(taskId)) return res.status(400).json({ error: 'Invalid task ID' })
+
+    const today  = new Date().toISOString().split('T')[0]
+    const tasks  = await getTasksForDate(today)
+    const task   = tasks.find(t => t.id === taskId)
+
+    // Also check historical dates — task might not be "today" if scheduled differently
+    const resolvedTask = task ?? (await (async () => {
+      const { supabase } = await import('./supabaseClient.js')
+      const { data } = await supabase.from('task').select('*').eq('id', taskId).single()
+      return data
+    })())
+
+    if (!resolvedTask) return res.status(404).json({ error: 'Task not found' })
+    if (resolvedTask.status === 'completed') return res.status(400).json({ error: 'Task already completed' })
+
+    const ps   = await getPlayerState()
+    // Normalise playerState shape for calculateCompletion
+    const playerForCalc = {
+      level:      ps.level,
+      current_xp: ps.current_xp,
+      xp_to_next: ps.xp_to_next,
+      streak:     { day_streak: ps.streak }   // rpgEngine expects player.streak.day_streak
+    }
+    const calc   = calculateCompletion(resolvedTask, playerForCalc)
+    const result = await completeTask(taskId, calc)
     projectTask(taskId).catch(e => console.error('[projection]', e))
     res.json(result)
-  } catch (e) { res.status(400).json({ error: e.message }) }
+  } catch (e) {
+    console.error('Complete task error:', e.message)
+    res.status(400).json({ error: e.message })
+  }
 })
 
 app.post('/tasks/:id/skip', async (req, res) => {

@@ -1,0 +1,12 @@
+{
+  "name": "lifemap",
+  "version": "2.0.0",
+  "type": "module",
+  "scripts": {
+    "setup":      "node scripts/setup.js",
+    "embed-seed": "node scripts/embed-seed.js",
+    "dev":        "cd api && node src/server.js",
+    "start":      "cd api && node src/server.js"
+  },
+  "description": "Life Map v2 — personal RPG task manager"
+}

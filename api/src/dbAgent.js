@@ -2,7 +2,7 @@
 // No business logic here. Pure data access layer.
 
 import { supabase } from './supabaseClient.js'
-import { rpgEngine } from './rpgEngine.js'
+import * as rpgEngine from './rpgEngine.js'
 
 // ── Player state ──────────────────────────────────────────────────────────────
 export async function getPlayerState() {
