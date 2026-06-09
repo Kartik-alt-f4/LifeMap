@@ -1,0 +1,128 @@
+{
+  "_comment": "All RPG game mechanics. Edit via Settings page or directly. Server reloads on change.",
+
+  "player": {
+    "xp_level_formula": {
+      "base_xp": 100,
+      "base_multiplier": 1.060,
+      "decay_rate": 0.0075,
+      "decay_offset": 55,
+      "level_0_xp": 50,
+      "level_1_xp": 100
+    },
+    "ranks": [
+      { "level": 1,   "title": "Hatchling" },
+      { "level": 5,   "title": "Early Bird" },
+      { "level": 10,  "title": "Getting a Hang of It" },
+      { "level": 20,  "title": "Showing Up" },
+      { "level": 30,  "title": "Half a Year In" },
+      { "level": 50,  "title": "Godlike" },
+      { "level": 100, "title": "Young You is Proud" }
+    ]
+  },
+
+  "tasks": {
+    "types": ["anchor", "mandatory", "project", "bonus", "habit", "routine"],
+    "priority_order": ["anchor", "mandatory", "project", "bonus", "habit", "routine"],
+    "xp_base": {
+      "anchor":    15,
+      "mandatory": 10,
+      "project":   15,
+      "bonus":      6,
+      "habit":     12,
+      "routine":    4
+    },
+    "gold_base": {
+      "anchor":    12,
+      "mandatory":  8,
+      "project":   10,
+      "bonus":      4,
+      "habit":      6,
+      "routine":    2
+    },
+    "difficulty_xp_offset":   { "low": -2, "medium": 0, "high": 4 },
+    "difficulty_gold_offset": { "low": -1, "medium": 0, "high": 3 },
+    "gold_floor": 1,
+    "late_penalty_per_day": 0.9
+  },
+
+  "energy": {
+    "max": 100,
+    "passive_morning_regen": 10,
+    "recovery_task_restore": 15,
+    "drain_by_type": {
+      "anchor":    10,
+      "mandatory":  8,
+      "project":   10,
+      "bonus":      3,
+      "habit":      6,
+      "routine":    2
+    },
+    "drain_difficulty_offset": { "low": -2, "medium": 0, "high": 4 },
+    "drain_floor": 1,
+    "thresholds": {
+      "normal":     60,
+      "reduced":    30,
+      "min_viable": 10,
+      "recovery":    0
+    }
+  },
+
+  "streak": {
+    "formula_coefficient": 0.019959,
+    "formula_exponent": 0.593015
+  },
+
+  "skills": {
+    "xp_formula": {
+      "base_xp": 100,
+      "base_multiplier": 1.030,
+      "decay_rate": 0.0050,
+      "decay_offset": 55,
+      "level_0_xp": 50,
+      "level_1_xp": 100
+    },
+    "match_floor": 0.65,
+    "candidate_threshold": 3,
+    "candidate_max_distance": 0.35,
+    "child_match_floor": 0.75,
+    "child_candidate_threshold": 4,
+    "child_candidate_max_distance": 0.25,
+    "child_divergence_min": 0.20,
+    "decay_trigger_threshold": -7,
+    "projection_tiers": [
+      { "min": 0.65, "max": 0.699, "multiplier": 0.4 },
+      { "min": 0.70, "max": 0.799, "multiplier": 0.5 },
+      { "min": 0.80, "max": 0.899, "multiplier": 0.6 },
+      { "min": 0.90, "max": 0.999, "multiplier": 0.7 },
+      { "min": 1.00, "max": 1.001, "multiplier": 0.8 }
+    ]
+  },
+
+  "stats": {
+    "match_floor": 0.40,
+    "max_value": 100,
+    "decay_trigger_threshold": -7,
+    "projection_tiers": [
+      { "min": 0.40, "max": 0.599, "multiplier": 0.2 },
+      { "min": 0.60, "max": 0.799, "multiplier": 0.4 },
+      { "min": 0.80, "max": 1.001, "multiplier": 0.6 }
+    ],
+    "definitions": [
+      { "name": "Strength",     "description": "Physical power and endurance" },
+      { "name": "Vitality",     "description": "Health, recovery, and resilience" },
+      { "name": "Agility",      "description": "Speed, reflexes, and adaptability" },
+      { "name": "Intelligence", "description": "Learning, reasoning, and problem solving" },
+      { "name": "Willpower",    "description": "Discipline, focus, and mental strength" },
+      { "name": "Charisma",     "description": "Communication, influence, and presence" }
+    ]
+  },
+
+  "shop": {
+    "default_items": [
+      { "name": "YouTube Evening", "description": "1 hour of guilt-free YouTube",          "cost": 10, "type": "leisure" },
+      { "name": "Gaming Session",  "description": "1 hour of gaming, no guilt",             "cost": 15, "type": "leisure" },
+      { "name": "Day Off",         "description": "Mandatory met. Treat it as a rest day.", "cost": 30, "type": "day_off" }
+    ]
+  }
+}

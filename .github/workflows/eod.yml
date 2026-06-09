@@ -1,0 +1,16 @@
+name: EOD Cron
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  eod:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run EOD cron
+        run: |
+          curl -X POST ${{ secrets.SERVER_URL }}/cron/eod \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            --fail --max-time 30

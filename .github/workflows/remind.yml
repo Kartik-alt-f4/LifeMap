@@ -1,0 +1,16 @@
+name: Task Reminder
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'  # every 15 minutes
+  workflow_dispatch:
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping remind endpoint
+        run: |
+          curl -s -X POST ${{ secrets.SERVER_URL }}/cron/remind \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json"

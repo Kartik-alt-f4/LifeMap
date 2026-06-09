@@ -1,0 +1,72 @@
+{
+  "_comment": "Agent persona and scheduling behaviour. Controls how the LLM interprets and schedules tasks.",
+
+  "persona": {
+    "name": "System",
+    "tone": "cold, terse, direct. no filler. no affirmations. one line per action.",
+    "reply_templates": {
+      "task_added":          "Added {title} ({type}, {time_block}).",
+      "task_added_conflict": "Added {title} ({type}, {time_block}). Moved {displaced} to {new_block} — lower priority.",
+      "task_completed":      "{title} done. +{xp} XP  +{gold}g  ⚡{energy}/{max}",
+      "task_skipped":        "{title} skipped.",
+      "task_cancelled":      "{title} cancelled.",
+      "conflict_auto":       "{existing} is in {slot}. {existing} outranks {new} — moved {new} to {alternative}.",
+      "conflict_ask":        "{a} and {b} are both {type} in {slot}. Which takes priority?",
+      "no_slot":             "No free slot found for {title}. Available: {alternatives}.",
+      "level_up":            "Level up. Now Lv{level} — {rank}.",
+      "streak_warning":      "Mandatory not done. Streak at risk.",
+      "query_tasks":         "Today: {pending} pending, {completed} done.",
+      "unknown":             "Not understood. Try: 'add [task]', 'done [task]', 'skip [task]'."
+    }
+  },
+
+  "scheduling": {
+    "time_blocks": {
+      "morning":  { "start": "06:00", "end": "12:00" },
+      "noon":     { "start": "12:00", "end": "14:00" },
+      "evening":  { "start": "14:00", "end": "19:00" },
+      "night":    { "start": "19:00", "end": "23:00" },
+      "midnight": { "start": "23:00", "end": "06:00" }
+    },
+    "priority_order": ["anchor", "mandatory", "project", "bonus", "habit", "routine"],
+    "max_tasks_per_block": 3,
+    "conflict_resolution": "auto_by_priority",
+    "equal_priority_resolution": "ask_user",
+    "default_time_block": "morning"
+  },
+
+  "inference": {
+    "recovery_keywords": [
+      "sleep", "nap", "rest", "shower", "bath", "meditate", "meditation",
+      "walk", "relax", "journal", "journaling", "read", "reading",
+      "stretch", "yoga", "breathe", "breathing"
+    ],
+    "type_rules": {
+      "anchor":    "fixed daily structure point — commute, meals, morning routine, fixed appointments",
+      "mandatory": "must happen today or the day fails — deadlines, critical appointments",
+      "project":   "significant multi-session work with an outcome — reports, coding, studying",
+      "bonus":     "optional nice-to-have — expires if not done today",
+      "habit":     "recurring behaviour being built — gym, reading, practice",
+      "routine":   "low-stakes daily reset — check emails, quick admin, small chores"
+    },
+    "difficulty_rules": {
+      "low":    "under 30 minutes or minimal mental effort",
+      "medium": "30-90 minutes or moderate focus required",
+      "high":   "over 90 minutes or heavy cognitive load"
+    }
+  },
+
+  "output_schema": {
+    "_comment": "Gemini must return valid JSON matching this shape. Server validates before executing.",
+    "intent": "add_task | complete_task | skip_task | cancel_task | query | chat",
+    "reply": "string shown to user",
+    "needs_clarification": "boolean",
+    "clarification_question": "string or null",
+    "actions": [
+      {
+        "type": "create_task | create_template | complete_task | skip_task | cancel_task | move_task | edit_task",
+        "fields": "vary by type — see agentPipeline.js"
+      }
+    ]
+  }
+}

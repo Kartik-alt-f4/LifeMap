@@ -1,0 +1,16 @@
+name: Morning Cron
+on:
+  schedule:
+    - cron: '0 11 * * *'
+  workflow_dispatch:
+
+jobs:
+  morning:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run morning cron
+        run: |
+          curl -X POST ${{ secrets.SERVER_URL }}/cron/morning \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            --fail --max-time 30

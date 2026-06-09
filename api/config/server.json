@@ -1,0 +1,38 @@
+{
+  "_comment": "Server, model, session, cron, and notification settings.",
+
+  "server": {
+    "port": 3001,
+    "timezone": "America/New_York",
+    "node_env": "development"
+  },
+
+  "model": {
+    "name": "gemini-3.1-flash-lite",
+    "max_output_tokens": 400,
+    "temperature": 0.7,
+    "embedding_model": "gemini-embedding-001"
+  },
+
+  "session": {
+    "max_messages": 20,
+    "truncation_limit": 600,
+    "ttl_days": 7
+  },
+
+  "cron": {
+    "morning_utc":          "0 11 * * *",
+    "eod_utc":              "0 3 * * *",
+    "remind_interval_min":  15,
+    "health_interval_min":  14,
+    "cleanup_utc":          "0 3 * * 0"
+  },
+
+  "notifications": {
+    "remind_minutes_before": 30,
+    "morning_briefing":      true,
+    "eod_summary":           true,
+    "streak_warning":        true,
+    "streak_warning_hour_est": 21
+  }
+}

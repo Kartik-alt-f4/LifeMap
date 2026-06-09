@@ -1,0 +1,16 @@
+name: Weekly Cleanup
+on:
+  schedule:
+    - cron: '0 3 * * 0'
+  workflow_dispatch:
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run session cleanup
+        run: |
+          curl -X POST ${{ secrets.SERVER_URL }}/cron/cleanup \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            --fail --max-time 30
