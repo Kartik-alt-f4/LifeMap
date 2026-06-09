@@ -1,0 +1,6 @@
+# ENV
+.env
+
+# Node modules
+node_modules
+api/node_modules
