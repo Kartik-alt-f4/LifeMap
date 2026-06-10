@@ -4,3 +4,6 @@
 # Node modules
 node_modules
 api/node_modules
+
+web/dist/
+web/node_modules/
