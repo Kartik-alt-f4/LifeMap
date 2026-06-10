@@ -10,12 +10,17 @@ const TIME_BLOCKS  = ['morning','noon','evening','night','midnight','']
 function computeRewards(task, config) {
   const g = config?.game
   if (!g) return { xp: 0, gold: 0, energy: 0 }
-  const xp     = g.tasks.xp_base[task.task_type] ?? 0
-  const gold   = Math.max(g.tasks.gold_floor,
-    (g.tasks.gold_base[task.task_type] ?? 0) +
+  const xp   = Math.max(0,
+    (g.tasks.xp_base[task.task_type]                ?? 0) +
+    (g.tasks.difficulty_xp_offset?.[task.difficulty] ?? 0)
+  )
+  const gold = Math.max(g.tasks.gold_floor ?? 1,
+    (g.tasks.gold_base[task.task_type]                ?? 0) +
     (g.tasks.difficulty_gold_offset?.[task.difficulty] ?? 0)
   )
-  const energy = g.energy.drain_by_type?.[task.task_type] ?? 5
+  const energyBase   = g.energy.drain_by_type?.[task.task_type]              ?? 5
+  const energyOffset = g.energy.drain_difficulty_offset?.[task.difficulty]   ?? 0
+  const energy       = Math.max(g.energy.drain_floor ?? 1, energyBase + energyOffset)
   return { xp, gold, energy }
 }
 

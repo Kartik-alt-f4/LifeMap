@@ -161,7 +161,7 @@
     ]
   },
   "stats": {
-    "match_floor": 0.4,
+    "match_floor": 0.6,
     "max_value": 100,
     "decay_trigger_threshold": -7,
     "projection_tiers": [

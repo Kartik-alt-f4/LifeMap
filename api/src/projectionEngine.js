@@ -150,15 +150,22 @@ export async function projectTask(taskId) {
   const baseXp = cfg.tasks.xp_base[task.task_type] ?? 10
   let anyMatch = false
 
-  // ── Stat projection ──────────────────────────────────────────────────────
+  // ── Stat projection: top 3 stats by similarity, min threshold ───────────
+  const STAT_MAX   = 3
+  const STAT_FLOOR = cfg.stats.match_floor ?? 0.55  // higher floor — stats are generic
   const { data: stats } = await supabase.from('stat').select('id, name, current_value, embedding_vector')
-  for (const s of stats ?? []) {
-    if (!s.embedding_vector) continue
-    const sim = cos(taskVec, parseVec(s.embedding_vector))
-    if (sim < cfg.stats.match_floor) continue
-    anyMatch = true
-    const xpAmt = baseXp * getProjectionMultiplier(sim, cfg.stats.projection_tiers)
-    const newValue = Math.min(cfg.stats.max_value, (s.current_value ?? 0) + xpAmt)
+  const statScores = (stats ?? [])
+    .filter(s => s.embedding_vector)
+    .map(s => ({ s, sim: cos(taskVec, parseVec(s.embedding_vector)) }))
+    .filter(({ sim }) => sim >= STAT_FLOOR)
+    .sort((a, b) => b.sim - a.sim)
+    .slice(0, STAT_MAX)
+
+  if (statScores.length > 0) anyMatch = true
+
+  for (const { s, sim } of statScores) {
+    const xpAmt   = baseXp * getProjectionMultiplier(sim, cfg.stats.projection_tiers)
+    const newValue = Math.min(cfg.stats.max_value ?? 100, (s.current_value ?? 0) + xpAmt)
     await supabase.from('stat').update({ current_value: newValue }).eq('id', s.id)
     await supabase.from('xp_ledger').insert({
       source_task_id: taskId, amount: xpAmt,
@@ -171,25 +178,34 @@ export async function projectTask(taskId) {
       { task_id: taskId, stat_id: s.id, similarity_score: sim },
       { onConflict: 'task_id,stat_id', ignoreDuplicates: true }
     )
+    console.log(`[projection] stat ${s.name}\n+${xpAmt.toFixed(2)}\n(sim:${sim.toFixed(3)})`)
   }
 
   // ── Skill projection ─────────────────────────────────────────────────────
   const { data: skills } = await supabase
     .from('skill').select('id, current_xp, current_level, xp_to_next, centroid_vector, parent_skill_id')
 
+  // Top 2 skills by similarity
+  const SKILL_MAX = 2
+  const skillScores = (skills ?? [])
+    .filter(sk => sk.centroid_vector)
+    .map(sk => ({ sk, sim: cos(taskVec, parseVec(sk.centroid_vector)) }))
+    .filter(({ sim }) => sim >= cfg.skills.match_floor)
+    .sort((a, b) => b.sim - a.sim)
+    .slice(0, SKILL_MAX)
+
   const matchedSkills = []
-  for (const sk of skills ?? []) {
-    if (!sk.centroid_vector) continue
-    const sim = cos(taskVec, parseVec(sk.centroid_vector))
-    if (sim < cfg.skills.match_floor) continue
+  for (const { sk, sim } of skillScores) {
     anyMatch = true
     const xpAmt = baseXp * getProjectionMultiplier(sim, cfg.skills.projection_tiers)
     await awardSkillXP(taskId, sk.id, xpAmt, sim, task.completed_at)
     matchedSkills.push({ id: sk.id, centroid: parseVec(sk.centroid_vector), parentId: sk.parent_skill_id })
+    console.log('[projection] skill id:' + sk.id + '\n+' + xpAmt.toFixed(2) + '\n(sim:' + sim.toFixed(3) + ')')
   }
 
-  // ── Top-level candidate bucket (if no skill matched) ──────────────────────
-  if (!anyMatch) {
+  // ── Skill candidate bucket — runs independently of stat projection ─────────
+  const skillMatched = skillScores.length > 0
+  if (!skillMatched) {
     const { data: cands } = await supabase
       .from('skill_candidate').select('cluster_id, cluster_centroid').is('parent_skill_id', null)
     const clusterMap = new Map()

@@ -120,12 +120,17 @@ app.post('/tasks/:id/complete', async (req, res) => {
     const ps   = await getPlayerState()
     // Normalise playerState shape for calculateCompletion
     const playerForCalc = {
-      level:      ps.level,
-      current_xp: ps.current_xp,
-      xp_to_next: ps.xp_to_next,
-      streak:     { day_streak: ps.streak }   // rpgEngine expects player.streak.day_streak
+      level:      ps.level      ?? 1,
+      current_xp: ps.current_xp ?? 0,
+      xp_to_next: ps.xp_to_next ?? 100,
+      streak:     { day_streak: ps.streak ?? 0 }
     }
     const calc   = calculateCompletion(resolvedTask, playerForCalc)
+    console.log('[complete] task:', resolvedTask.task_type, resolvedTask.difficulty)
+    console.log('[complete] calc:', JSON.stringify(calc))
+    if (calc.xp == null || calc.gold == null) {
+      return res.status(500).json({ error: `calculateCompletion returned null: xp=${calc.xp} gold=${calc.gold}` })
+    }
     const result = await completeTask(taskId, calc)
     projectTask(taskId).catch(e => console.error('[projection]', e))
     res.json(result)
@@ -183,8 +188,24 @@ app.post('/chat', async (req, res) => {
     const { actions, needsClarification, clarificationQuestion } = agentResult
     let { reply, intent } = agentResult
 
+    // Server-side duplicate guard — filter out create_task where title already exists today
+    const dedupedActions = actions.filter(action => {
+      if (action.type !== 'create_task') return true
+      const titleLower = (action.title ?? '').toLowerCase()
+      const exists = todayTasks.some(t =>
+        t.title.toLowerCase() === titleLower ||
+        t.title.toLowerCase().includes(titleLower) ||
+        titleLower.includes(t.title.toLowerCase())
+      )
+      if (exists) {
+        console.log(`[dedup] blocked duplicate: "${action.title}"`)
+        return false
+      }
+      return true
+    })
+
     // Resolve edit_task with _title_hint — find task_id by title match
-    const resolvedActions = actions.map(action => {
+    const resolvedActions = dedupedActions.map(action => {
       if (action.type === 'edit_task' && !action.task_id && action._title_hint) {
         const hint = action._title_hint.toLowerCase()
         const match = todayTasks.find(t =>

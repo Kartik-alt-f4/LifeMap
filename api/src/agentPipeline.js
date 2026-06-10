@@ -37,7 +37,14 @@ export async function runAgent(userMessage, sessionHistory, playerState, dateStr
   }
 
   // Player state context — compact, only essentials
-  const stateCtx = `\n\n[STATE]\nLv${playerState.level} | ⚡${playerState.energy.current}/${playerState.energy.max} | 🔥${playerState.streak} | ◆${playerState.available_gold}g\n[/STATE]`
+  // Inject real server time so model doesn't hallucinate dates
+  const now      = new Date()
+  const nowISO   = now.toISOString()
+  const todayDate= now.toISOString().split('T')[0]
+  const tomorrowDate = new Date(now.getTime() + 86400000).toISOString().split('T')[0]
+  const timeStr  = now.toLocaleString('en-US', { timeZone: 'America/New_York', hour:'2-digit', minute:'2-digit', hour12:true })
+
+  const stateCtx = `\n\n[STATE]\nLv${playerState.level} | ⚡${playerState.energy.current}/${playerState.energy.max} | 🔥${playerState.streak} | ◆${playerState.available_gold}g\nDATE: ${todayDate} | TIME: ${timeStr} EST | TOMORROW: ${tomorrowDate}\n[/STATE]`
 
   // Inject today's tasks so agent can find task IDs for edit/complete/skip/cancel
   let tasksCtx = ''

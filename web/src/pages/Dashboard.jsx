@@ -27,11 +27,13 @@ function shiftDate(d, days) {
 function computeRewards(task, config) {
   const g = config?.game
   if (!g) return { xp: 0, gold: 0 }
-  if (task.task_type === 'routine') return { xp: g.tasks.xp_base.routine, gold: g.tasks.gold_base.routine }
-  const xp   = g.tasks.xp_base[task.task_type] ?? 0
-  const gold  = Math.max(g.tasks.gold_floor,
-    (g.tasks.gold_base[task.task_type] ?? 0) +
-    (g.tasks.difficulty_gold_offset[task.difficulty] ?? 0)
+  const xp   = Math.max(0,
+    (g.tasks.xp_base[task.task_type]           ?? 0) +
+    (g.tasks.difficulty_xp_offset?.[task.difficulty] ?? 0)
+  )
+  const gold = Math.max(g.tasks.gold_floor ?? 1,
+    (g.tasks.gold_base[task.task_type]           ?? 0) +
+    (g.tasks.difficulty_gold_offset?.[task.difficulty] ?? 0)
   )
   return { xp, gold }
 }
@@ -170,28 +172,37 @@ export default function Dashboard({ playerState, config, onRefresh }) {
         {/* Next task card */}
         {nextTask ? (
           <div className="next-card" onClick={() => setSelected(nextTask)} style={{ cursor:'pointer' }}>
-            <div className="next-label">▶ next up</div>
-            <div className="next-title">{nextTask.title}</div>
-            <div className="tags">
-              <span className={`tag tag-${nextTask.task_type}`}>{nextTask.task_type}</span>
-              <span className={`tag tag-${nextTask.priority?.toLowerCase()}`}>{nextTask.priority}</span>
-              {nextTask.difficulty && <span className="tag">{nextTask.difficulty}</span>}
-              {nextTask.time_block  && <span className="tag">{nextTask.time_block}</span>}
+            <div>
+              <div className="next-label">▶ next up</div>
+              <div className="next-title" style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                {nextTask.title}
+              </div>
             </div>
-            {config && (() => {
-              const { xp, gold } = computeRewards(nextTask, config)
-              return (
-                <div className="next-rewards">
-                  <span className="reward reward-xp">+{xp} XP</span>
-                  <span className="reward reward-gold">+{gold}g</span>
-                </div>
-              )
-            })()}
+            <div>
+              <div className="tags" style={{ marginBottom:6 }}>
+                <span className={`tag tag-${nextTask.task_type}`}>{nextTask.task_type}</span>
+                <span className={`tag tag-${nextTask.priority?.toLowerCase()}`}>{nextTask.priority}</span>
+                {nextTask.difficulty && <span className="tag">{nextTask.difficulty}</span>}
+                {nextTask.time_block  && <span className="tag">{nextTask.time_block}</span>}
+              </div>
+              {config && (() => {
+                const { xp, gold } = computeRewards(nextTask, config)
+                return (
+                  <div className="next-rewards">
+                    <span className="reward reward-xp">+{xp} XP</span>
+                    <span className="reward reward-gold">+{gold}g</span>
+                  </div>
+                )
+              })()}
+            </div>
           </div>
         ) : (
           <div className="next-card">
-            <div className="next-label">▶ all clear</div>
-            <div className="next-title" style={{ color:'var(--text-muted)' }}>No pending tasks.</div>
+            <div>
+              <div className="next-label">▶ all clear</div>
+              <div className="next-title" style={{ color:'var(--text-muted)' }}>No pending tasks.</div>
+            </div>
+            <div />
           </div>
         )}
 

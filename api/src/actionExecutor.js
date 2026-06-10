@@ -51,7 +51,14 @@ export async function executeActions(actions, playerState) {
           const tasks = await getTasksForDate(today)
           const task  = tasks.find(t => t.id === action.task_id)
           if (!task) throw new Error(`Task ${action.task_id} not found`)
-          const calc  = calculateCompletion(task, playerState)
+          // Normalise playerState shape — calculateCompletion expects streak.day_streak
+          const playerForCalc = {
+            level:      playerState.level      ?? 1,
+            current_xp: playerState.current_xp ?? 0,
+            xp_to_next: playerState.xp_to_next ?? 100,
+            streak:     { day_streak: playerState.streak ?? 0 }
+          }
+          const calc  = calculateCompletion(task, playerForCalc)
           result      = await completeTask(action.task_id, calc)
           // Queue projection async — don't block the response
           projectTask(action.task_id).catch(e =>

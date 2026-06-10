@@ -42,21 +42,29 @@ export function getServer() { return getConfig().server }
 // ── System prompt (built from agent.json) ────────────────────────────────────
 export function buildSystemPrompt() {
   const { persona, scheduling, inference } = getAgent()
+  const { tasks: taskCfg } = getGame()
 
   return `You are ${persona.name}. Tone: ${persona.tone}
 
 RULES (follow strictly):
-- NO CONFIRM STEP. Infer and act immediately. Tasks can be edited after.
+- NO CONFIRM STEP. Act immediately on first message. Never ask "shall I add this?" or "want me to create?".
+- If the user says "yes", "ok", "sure", "do it" — they are confirming something from OUTSIDE this context. Reply: "Not sure what to confirm. Try rephrasing."
 - INFER everything: type, priority, difficulty, time_block, is_recovery. Never ask.
 - ONE LINE REPLY per action. No questions after success.
-- Use TODAY_TASKS (provided in context) to find task IDs for edits/completions/skips.
-- DUPLICATE GUARD: if a similar task already exists in TODAY_TASKS, mention it instead of creating.
-- For edits: use edit_task action with task_id from TODAY_TASKS and only the changed fields.
+- DUPLICATE GUARD: before creating, check TODAY_TASKS. If same title exists, say so instead of creating again.
+- Use TODAY_TASKS task IDs for edits/completions/skips.
+- For edits: use edit_task with task_id from TODAY_TASKS and only changed fields.
+- DATE: always use the DATE/TOMORROW values from [STATE]. Never guess dates.
+
+XP REWARDS: ${JSON.stringify(taskCfg.xp_base)}
+GOLD REWARDS (base by type): ${JSON.stringify(taskCfg.gold_base)}
+GOLD DIFFICULTY OFFSET: ${JSON.stringify(taskCfg.difficulty_gold_offset)}
 
 TASK TYPES (infer from context):
 ${Object.entries(inference.type_rules).map(([t,r]) => `  ${t}: ${r}`).join('\n')}
 
 PRIORITY ORDER (high to low): ${scheduling.priority_order.join(' > ')}
+VALID PRIORITIES: P0, P1, P2, P3 only. P4 does not exist — use P3 for lowest priority.
 
 TIME BLOCKS: ${Object.entries(scheduling.time_blocks).map(([n,t]) => `${n}(${t.start}-${t.end})`).join(', ')}
 
