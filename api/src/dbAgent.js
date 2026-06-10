@@ -2,7 +2,6 @@
 // No business logic here. Pure data access layer.
 
 import { supabase } from './supabaseClient.js'
-import * as rpgEngine from './rpgEngine.js'
 
 // ── Player state ──────────────────────────────────────────────────────────────
 export async function getPlayerState() {
@@ -19,8 +18,10 @@ export async function getPlayerState() {
   const e = energyRes.data
   const d = dailyRes.data
 
+  const { getRank } = await import('./rpgEngine.js')
   return {
     level:          p.current_level,
+    rank:           getRank(p.current_level),
     current_xp:     p.current_xp,
     xp_to_next:     p.xp_to_next,
     total_gold:     p.total_gold,
@@ -46,6 +47,7 @@ export async function getTasksForDate(dateStr) {
     .from('task')
     .select('*')
     .eq('scheduled_for', dateStr)
+    .neq('status', 'cancelled')
     .order('scheduled_at', { ascending: true, nullsFirst: false })
 
   if (error) throw error
@@ -355,4 +357,31 @@ export async function pruneOldMessages(sessionId, keepCount) {
   if (!data || data.length <= keepCount) return
   const toDelete = data.slice(0, data.length - keepCount).map(r => r.id)
   await supabase.from('conversation_message').delete().in('id', toDelete)
+}
+
+// ── Async description generation (non-blocking) ───────────────────────────────
+// Called after task creation. Generates a short description using Gemini,
+// taking into account the task title and any user-provided context.
+export async function generateDescription(taskId, title, taskType, userContext = null) {
+  try {
+    const { GoogleGenerativeAI } = await import('@google/generative-ai')
+    const { getServer } = await import('./configLoader.js')
+    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY)
+    const model = genAI.getGenerativeModel({
+      model: getServer().model.name,
+      generationConfig: { temperature: 0.4, maxOutputTokens: 50 }
+    })
+
+    const contextLine = userContext ? `User context: "${userContext}".` : ''
+    const prompt = `Task: "${title}" (${taskType}). ${contextLine}
+Write one sentence (max 20 words) describing what completing this task involves. Be specific and concrete. No filler phrases.`
+
+    const result = await model.generateContent(prompt)
+    const description = result.response.text().trim().replace(/^"|"$/g, '')
+
+    await supabase.from('task').update({ description }).eq('id', taskId)
+    console.log(`[desc] task ${taskId} described`)
+  } catch (err) {
+    console.error(`[desc] task ${taskId} failed:`, err.message)
+  }
 }

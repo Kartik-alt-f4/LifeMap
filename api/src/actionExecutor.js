@@ -3,7 +3,7 @@
 
 import {
   createTask, createTemplate, completeTask, skipTask, cancelTask,
-  moveTask, editTask, getTasksForDate
+  moveTask, editTask, getTasksForDate, generateDescription
 } from './dbAgent.js'
 import { calculateCompletion } from './rpgEngine.js'
 import { projectTask } from './projectionEngine.js'
@@ -28,6 +28,11 @@ export async function executeActions(actions, playerState) {
             scheduled_at:  action.scheduled_at  ?? null,
             is_recovery:   action.is_recovery   ?? false
           })
+          // Generate description async — non-blocking
+          if (result?.id) {
+            generateDescription(result.id, action.title, action.task_type, null)
+              .catch(e => console.error('[desc]', e.message))
+          }
           break
 
         case 'create_template':

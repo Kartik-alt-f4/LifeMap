@@ -308,6 +308,16 @@ a { color: inherit; text-decoration: none; }
 .task-row.urgent { border-left-color: var(--danger); background: var(--danger-dim); }
 .task-row.carried { border-left-color: var(--warning); background: var(--warning-dim); }
 
+.task-row.skipped {
+  border-left-color: #6b52c8;
+  background: rgba(107,82,200,0.06);
+  opacity: 0.65;
+}
+.task-row.skipped .task-name {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
 .task-icon { font-size: 13px; flex-shrink: 0; margin-top: 1px; }
 .task-body { flex: 1; min-width: 0; }
 .task-title-row {
@@ -458,7 +468,9 @@ a { color: inherit; text-decoration: none; }
   margin-left: auto; transition: all var(--t-fast);
 }
 .modal-close:hover { border-color: var(--danger); color: var(--danger); }
-.modal-body { overflow-y: auto; flex: 1; }
+.modal-body { overflow-y: auto; flex: 1; min-height: 0; }
+.settings-layout { height: 460px; min-height: 0; }
+.settings-content { overflow-y: auto; }
 
 /* ── SHOP ────────────────────────────────────────────────────────────────── */
 .shop-grid {

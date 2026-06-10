@@ -102,3 +102,11 @@ export function calculateCompletion(task, player) {
     isRecovery: task.is_recovery ?? false
   }
 }
+
+// ── Rank lookup ───────────────────────────────────────────────────────────────
+export function getRank(level) {
+  const ranks = getGame().ranks || []
+  // Find the highest rank the player has reached
+  const reached = ranks.filter(r => level >= r.level)
+  return reached.length ? reached[reached.length - 1].title : 'Hatchling'
+}

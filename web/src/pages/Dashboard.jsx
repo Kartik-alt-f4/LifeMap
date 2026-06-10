@@ -36,10 +36,24 @@ function computeRewards(task, config) {
   return { xp, gold }
 }
 
-function isUrgent(task) {
+const BLOCK_END_HOURS = { morning:12, noon:14, evening:19, night:23, midnight:6 }
+
+function isOverdue(task) {
   if (task.status !== 'pending') return false
+  // Carried from previous day
   if (task.late_multiplier < 1.0) return true
-  if (task.task_type === 'mandatory') return true
+  // Has exact time and it's passed
+  if (task.scheduled_at) {
+    return new Date(task.scheduled_at) < new Date()
+  }
+  // Time block has ended (EST)
+  if (task.time_block) {
+    const estHour = parseInt(
+      new Date().toLocaleString('en-US', { timeZone: 'America/New_York', hour: 'numeric', hour12: false }).replace('24','0'), 10
+    )
+    const blockEnd = BLOCK_END_HOURS[task.time_block]
+    if (blockEnd) return estHour >= blockEnd
+  }
   return false
 }
 
@@ -125,7 +139,9 @@ export default function Dashboard({ playerState, config, onRefresh }) {
   }
 
   // Next pending task
-  const nextTask = tasks?.find(t => t.status === 'pending')
+  // Next task: prefer pending + not overdue, fall back to first pending
+  const nextTask = tasks?.find(t => t.status === 'pending' && !isOverdue(t))
+    ?? tasks?.find(t => t.status === 'pending')
   const sorted   = tasks ? [...tasks].sort((a, b) => {
     if (a.status === 'completed' && b.status !== 'completed') return 1
     if (a.status !== 'completed' && b.status === 'completed') return -1
@@ -205,12 +221,12 @@ export default function Dashboard({ playerState, config, onRefresh }) {
             ) : sorted.map(task => {
               const { xp, gold } = computeRewards(task, config)
               const done    = task.status === 'completed'
-              const urgent  = isUrgent(task)
+              const urgent  = isOverdue(task)
               const carried = task.late_multiplier < 1.0 && !done
               return (
                 <div
                   key={task.id}
-                  className={`task-row${done ? ' completed' : urgent ? ' urgent' : carried ? ' carried' : ''}`}
+                  className={`task-row${done ? ' completed' : task.status === 'skipped' ? ' skipped' : urgent ? ' urgent' : carried ? ' carried' : ''}`}
                   onClick={() => setSelected(task)}
                 >
                   <span className="task-icon">{done ? '✓' : TYPE_ICONS[task.task_type] ?? '◈'}</span>
@@ -222,10 +238,13 @@ export default function Dashboard({ playerState, config, onRefresh }) {
                         <span className="t-reward gold-color">+{gold}g</span>
                       </div>
                     </div>
-                    <div className="task-meta">
-                      <span className="task-type-label">{task.task_type}</span>
-                      {task.time_block && <span className="task-time">{task.time_block}</span>}
-                      {carried && <span className="task-time" style={{ color:'var(--warning)' }}>carried</span>}
+                    <div className="task-meta" style={{ display:'flex', gap:3, flexWrap:'wrap', marginTop:3 }}>
+                      <span className={`tag tag-${task.task_type}`} style={{ fontSize:'9px', padding:'1px 5px' }}>{task.task_type}</span>
+                      <span className={`tag tag-${task.priority?.toLowerCase()}`} style={{ fontSize:'9px', padding:'1px 5px' }}>{task.priority}</span>
+                      {task.time_block && <span className="tag" style={{ fontSize:'9px', padding:'1px 5px' }}>{task.time_block}</span>}
+                      {task.difficulty && task.difficulty !== 'medium' && <span className="tag" style={{ fontSize:'9px', padding:'1px 5px' }}>{task.difficulty}</span>}
+                      {carried && <span className="tag" style={{ fontSize:'9px', padding:'1px 5px', borderColor:'rgba(240,180,41,0.3)', color:'var(--warning)' }}>carried</span>}
+                      {task.is_recovery && <span className="tag" style={{ fontSize:'9px', padding:'1px 5px', borderColor:'rgba(62,207,142,0.25)', color:'var(--success)' }}>recovery</span>}
                     </div>
                   </div>
                 </div>

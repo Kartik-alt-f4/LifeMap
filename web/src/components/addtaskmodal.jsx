@@ -21,6 +21,7 @@ export default function AddTaskModal({ config, onClose, onAdded }) {
   const [useSchedule,  setUseSchedule] = useState(false)
   const [schedDate,    setSchedDate]   = useState(todayStr())
   const [schedTime,    setSchedTime]   = useState('')
+  const [description,  setDescription] = useState('')
   const [submitting,   setSubmitting]  = useState(false)
   const [error,        setError]       = useState('')
 
@@ -182,6 +183,20 @@ export default function AddTaskModal({ config, onClose, onAdded }) {
           value={isRecovery}
           onChange={setRecovery}
         />
+
+        <div className="at-field">
+          <label className="at-label">
+            Description <span style={{ color:'var(--text-muted)', fontWeight:400, textTransform:'none' }}>(optional — AI generates one if blank)</span>
+          </label>
+          <textarea
+            className="at-input"
+            placeholder="What does this task actually involve? More context = better skill tracking."
+            value={description}
+            onChange={e => setDescription(e.target.value)}
+            rows={2}
+            style={{ resize:'vertical', minHeight:52 }}
+          />
+        </div>
 
         {error && <div className="at-error">{error}</div>}
 

@@ -81,7 +81,15 @@ app.get('/tasks', async (req, res) => {
 })
 
 app.post('/tasks', async (req, res) => {
-  try { res.json(await createTask(req.body)) }
+  try {
+    const task = await createTask(req.body)
+    // Generate description async — non-blocking
+    if (!task.description) {
+      generateDescription(task.id, task.title, task.task_type, req.body.description_context ?? null)
+        .catch(e => console.error('[desc]', e.message))
+    }
+    res.json(task)
+  }
   catch (e) { res.status(400).json({ error: e.message }) }
 })
 
@@ -164,16 +172,65 @@ app.post('/chat', async (req, res) => {
     if (!message) return res.status(400).json({ error: 'message required' })
 
     const today       = new Date().toISOString().split('T')[0]
-    const playerState = await getPlayerState()
+    const [playerState, todayTasks] = await Promise.all([
+      getPlayerState(),
+      getTasksForDate(today)
+    ])
     const { sessionId, messages } = await getHistory(session_id)
     const history     = formatForGemini(messages)
 
-    const { reply, actions, needsClarification, clarificationQuestion } =
-      await runAgent(message, history, playerState, today)
+    const agentResult = await runAgent(message, history, playerState, today, todayTasks)
+    const { actions, needsClarification, clarificationQuestion } = agentResult
+    let { reply, intent } = agentResult
+
+    // Resolve edit_task with _title_hint — find task_id by title match
+    const resolvedActions = actions.map(action => {
+      if (action.type === 'edit_task' && !action.task_id && action._title_hint) {
+        const hint = action._title_hint.toLowerCase()
+        const match = todayTasks.find(t =>
+          t.title.toLowerCase().includes(hint) || hint.includes(t.title.toLowerCase())
+        )
+        if (match) return { ...action, task_id: match.id }
+      }
+      return action
+    })
 
     let actionResults = []
-    if (actions.length && !needsClarification) {
-      actionResults = await executeActions(actions, playerState)
+    let actionErrors  = []
+    if (resolvedActions.length && !needsClarification) {
+      actionResults = await executeActions(resolvedActions, playerState)
+      actionErrors  = actionResults.filter(r => r.error)
+    }
+
+    // Refresh task list after any mutating action
+    const mutating = ['add_task','edit_task','complete_task','skip_task','cancel_task']
+    const freshTasks = mutating.includes(intent) && resolvedActions.length
+      ? await getTasksForDate(today)
+      : todayTasks
+
+    // If actions failed, override reply to explain
+    if (actionErrors.length) {
+      const reasons = actionErrors.map(r => r.error).join(', ')
+      reply = `Action failed: ${reasons}`
+    }
+
+    // Build task list reply server-side for any query
+    const isQuery = intent === 'query' || /^(list|show|what).*(task|pending|today)|pending tasks/i.test(message)
+    if (isQuery) {
+      const TYPE_ICON = { anchor:'⚓', mandatory:'⚔', project:'📋', bonus:'⭐', habit:'🔄', routine:'🌿' }
+      const fmt = tasks => tasks.map(t =>
+        `  ${TYPE_ICON[t.task_type] ?? '◈'} ${t.title} (${t.priority}${t.time_block ? ', '+t.time_block : ''})`
+      ).join('\n')
+
+      const pending = freshTasks.filter(t => t.status === 'pending')
+      const done    = freshTasks.filter(t => t.status === 'completed')
+      const skipped = freshTasks.filter(t => t.status === 'skipped')
+
+      const parts = []
+      if (pending.length) parts.push(`Pending (${pending.length}):\n${fmt(pending)}`)
+      if (done.length)    parts.push(`Done (${done.length}):\n${fmt(done)}`)
+      if (skipped.length) parts.push(`Skipped (${skipped.length}):\n${fmt(skipped)}`)
+      reply = parts.length ? parts.join('\n\n') : 'No tasks today.'
     }
 
     const finalReply = needsClarification ? clarificationQuestion : reply

@@ -71,6 +71,11 @@ export default function Navbar({ playerState: ps, activeModal, onOpenModal, onRe
                 <div style={{ fontSize:'13px', fontWeight:600, color:'var(--accent)', marginBottom:4 }}>
                   Lv.{ps.level}
                 </div>
+                {ps.rank && (
+                  <div style={{ fontSize:'10px', color:'var(--text-muted)', marginBottom:6, letterSpacing:'0.04em' }}>
+                    {ps.rank}
+                  </div>
+                )}
                 <div style={{ fontSize:'11px', color:'var(--text-muted)', marginBottom:8, fontFamily:'var(--mono)' }}>
                   {ps.current_xp} / {ps.xp_to_next} XP
                 </div>
