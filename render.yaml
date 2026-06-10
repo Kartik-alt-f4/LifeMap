@@ -3,7 +3,7 @@ services:
     name: lifemap
     runtime: node
     rootDir: api
-    buildCommand: npm install
+    buildCommand: npm install && cd ../web && npm install && npm run build
     startCommand: node src/server.js
     healthCheckPath: /health
     autoDeploy: true
