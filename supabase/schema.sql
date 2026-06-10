@@ -45,6 +45,7 @@ CREATE TABLE daily_state (
 CREATE TABLE task_template (
   id          serial  PRIMARY KEY,
   title       text    NOT NULL,
+  description text,
   task_type   text    NOT NULL
               CHECK (task_type IN ('anchor','mandatory','project','bonus','habit','routine')),
   priority    text    NOT NULL DEFAULT 'P2'
@@ -66,6 +67,7 @@ CREATE TABLE task (
   id                serial      PRIMARY KEY,
   template_id       int         REFERENCES task_template(id) ON DELETE SET NULL,
   title             text        NOT NULL,
+  description       text,
   task_type         text        NOT NULL
                     CHECK (task_type IN ('anchor','mandatory','project','bonus','habit','routine')),
   priority          text        NOT NULL DEFAULT 'P2'
@@ -288,4 +290,3 @@ GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated;
 CREATE OR REPLACE VIEW active_tasks AS
   SELECT * FROM task
   WHERE status NOT IN ('cancelled','skipped');
-
