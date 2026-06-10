@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { saveConfig } from '../api.js'
+import { useState, useEffect } from 'react'
+import { saveConfig, getStats } from '../api.js'
 
 const ADVANCED_SECTIONS = ['skills', 'streak']
 
@@ -8,6 +8,15 @@ export default function Settings({ config, onSaved }) {
   const [advanced, setAdvanced] = useState(false)
   const [saving,   setSaving]   = useState(false)
   const [saved,    setSaved]    = useState(false)
+
+  const [statDefs,   setStatDefs]   = useState([])
+  const [statSaving, setStatSaving] = useState(false)
+  const [statSaved,  setStatSaved]  = useState(false)
+
+  useEffect(() => {
+    getStats().then(s => setStatDefs(s.map(st => ({ ...st, _desc: st.description ?? '' }))))
+      .catch(console.error)
+  }, [])
 
   if (!config) return (
     <div className="modal-body" style={{ padding:20 }}>

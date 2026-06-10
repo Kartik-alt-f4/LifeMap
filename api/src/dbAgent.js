@@ -118,7 +118,7 @@ export async function createTemplate(fields) {
 
 // ── Edit a task ───────────────────────────────────────────────────────────────
 export async function editTask(taskId, fields) {
-  const ALLOWED = ['title','task_type','priority','difficulty','time_block',
+  const ALLOWED = ['title','description','task_type','priority','difficulty','time_block',
                    'scheduled_at','scheduled_for','is_recovery']
   const update = Object.fromEntries(
     Object.entries(fields).filter(([k]) => ALLOWED.includes(k))
@@ -372,9 +372,12 @@ export async function generateDescription(taskId, title, taskType, userContext =
       generationConfig: { temperature: 0.4, maxOutputTokens: 50 }
     })
 
-    const contextLine = userContext ? `User context: "${userContext}".` : ''
-    const prompt = `Task: "${title}" (${taskType}). ${contextLine}
-Write one sentence (max 20 words) describing what completing this task involves. Be specific and concrete. No filler phrases.`
+    const contextLine = userContext
+      ? `The user said: "${userContext}". Use this to be specific — mention only what they described, not general assumptions about the topic.`
+      : 'Be specific and concrete based on the task title only.'
+    const prompt = `Task: "${title}" (type: ${taskType}).
+${contextLine}
+Write ONE sentence (max 20 words) describing exactly what this task session involves. No filler. No guessing beyond what was stated.`
 
     const result = await model.generateContent(prompt)
     const description = result.response.text().trim().replace(/^"|"$/g, '')

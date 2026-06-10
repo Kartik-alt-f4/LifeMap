@@ -219,7 +219,7 @@ app.post('/chat', async (req, res) => {
     let actionResults = []
     let actionErrors  = []
     if (resolvedActions.length && !needsClarification) {
-      actionResults = await executeActions(resolvedActions, playerState)
+      actionResults = await executeActions(resolvedActions, playerState, message)
       actionErrors  = actionResults.filter(r => r.error)
     }
 
@@ -269,6 +269,19 @@ app.post('/chat', async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 app.get('/skills',    async (_, res) => { try { res.json(await getSkills()) }           catch (e) { res.status(500).json({ error: e.message }) } })
 app.get('/stats',     async (_, res) => { try { res.json(await getStats()) }            catch (e) { res.status(500).json({ error: e.message }) } })
+
+app.patch('/stats/:id', async (req, res) => {
+  try {
+    const { description } = req.body
+    if (!description?.trim()) return res.status(400).json({ error: 'description required' })
+    const { supabase } = await import('./supabaseClient.js')
+    const { data, error } = await supabase
+      .from('stat').update({ description: description.trim() })
+      .eq('id', parseInt(req.params.id)).select().single()
+    if (error) throw error
+    res.json(data)
+  } catch (e) { res.status(400).json({ error: e.message }) }
+})
 app.get('/shop',      async (_, res) => { try { res.json(await getShopWithCounts()) }   catch (e) { res.status(500).json({ error: e.message }) } })
 app.get('/snapshots', async (_, res) => { try { res.json(await getSnapshots()) }        catch (e) { res.status(500).json({ error: e.message }) } })
 app.get('/calendar',  async (req, res) => {

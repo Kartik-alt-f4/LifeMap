@@ -109,7 +109,7 @@ OUTPUT: valid JSON only. No markdown. No text outside the JSON.
 
 Action schemas:
   create_task:  { type, title, task_type, priority, difficulty, time_block, scheduled_at, scheduled_for, is_recovery, is_recurring }
-  edit_task:    { type, task_id, fields: { only_changed_fields } }
+  edit_task:    { type, task_id, fields: { only_changed_fields } }  // fields can include: title, description, task_type, priority, difficulty, time_block, scheduled_at, is_recovery
   complete_task:{ type, task_id }
   skip_task:    { type, task_id }
   cancel_task:  { type, task_id }

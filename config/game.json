@@ -154,7 +154,7 @@
         "multiplier": 0.7
       },
       {
-        "min": 1.0,
+        "min": 1,
         "max": 1.001,
         "multiplier": 0.8
       }
