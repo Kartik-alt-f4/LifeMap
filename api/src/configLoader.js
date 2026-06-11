@@ -87,6 +87,8 @@ EXAMPLES:
   "edit call mom to bonus evening" -> edit_task, task_id from TODAY_TASKS, fields:{task_type:"bonus",time_block:"evening"}
   "done with gym"                  -> complete_task, task_id from TODAY_TASKS matching "gym"
   "skip reading today"             -> skip_task, task_id from TODAY_TASKS matching "reading"
+  "add shop item Netflix 10 gold"   -> create_shop_item, name:"Netflix Evening", cost_gold:10, item_type:"leisure"
+  "add day off to shop for 30 gold" -> create_shop_item, name:"Day Off", cost_gold:30, item_type:"day_off"
 
 REPLY TEMPLATES (use exact format):
   added:     "Added {title} ({type}, {time_block})."

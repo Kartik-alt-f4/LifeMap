@@ -231,6 +231,21 @@ export async function getStats() {
 }
 
 // ── Shop ──────────────────────────────────────────────────────────────────────
+export async function createShopItem({ name, description, cost_gold, type }) {
+  const { data, error } = await supabase
+    .from('shop_item')
+    .insert({
+      name:        name.trim(),
+      description: description?.trim() ?? '',
+      cost_gold:   parseInt(cost_gold) || 10,
+      type:        ['leisure','day_off'].includes(type) ? type : 'leisure',
+      active:      true
+    })
+    .select().single()
+  if (error) throw error
+  return data
+}
+
 export async function getShopWithCounts() {
   const today = new Date().toISOString().split('T')[0]
   const [itemsRes, purchasesRes] = await Promise.all([

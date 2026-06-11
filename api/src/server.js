@@ -268,21 +268,6 @@ app.post('/chat', async (req, res) => {
 // SKILLS / STATS / SHOP / GRAPHS
 // ─────────────────────────────────────────────────────────────────────────────
 app.get('/skills',    async (_, res) => { try { res.json(await getSkills()) }           catch (e) { res.status(500).json({ error: e.message }) } })
-
-app.patch('/skills/:id', async (req, res) => {
-  try {
-    const { name, description } = req.body
-    if (!name?.trim() && !description?.trim()) return res.status(400).json({ error: 'name or description required' })
-    const { supabase } = await import('./supabaseClient.js')
-    const update = {}
-    if (name?.trim())        update.name        = name.trim()
-    if (description?.trim()) update.description = description.trim()
-    const { data, error } = await supabase
-      .from('skill').update(update).eq('id', parseInt(req.params.id)).select().single()
-    if (error) throw error
-    res.json(data)
-  } catch (e) { res.status(400).json({ error: e.message }) }
-})
 app.get('/stats',     async (_, res) => { try { res.json(await getStats()) }            catch (e) { res.status(500).json({ error: e.message }) } })
 
 app.patch('/stats/:id', async (req, res) => {
@@ -304,6 +289,26 @@ app.get('/calendar',  async (req, res) => {
     const month = req.query.month ?? new Date().toISOString().slice(0, 7)
     res.json(await getCalendar(month))
   } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+app.post('/shop', async (req, res) => {
+  try {
+    const { name, description, cost_gold, type } = req.body
+    if (!name?.trim()) return res.status(400).json({ error: 'name required' })
+    const { supabase } = await import('./supabaseClient.js')
+    const { data, error } = await supabase
+      .from('shop_item')
+      .insert({
+        name:        name.trim(),
+        description: description?.trim() ?? '',
+        cost_gold:   parseInt(cost_gold) || 10,
+        type:        ['leisure','day_off'].includes(type) ? type : 'leisure',
+        active:      true
+      })
+      .select().single()
+    if (error) throw error
+    res.json(data)
+  } catch (e) { res.status(400).json({ error: e.message }) }
 })
 
 app.post('/shop/:id/buy', async (req, res) => {

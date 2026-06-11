@@ -49,8 +49,8 @@ export default function ChatScreen() {
   return (
     <KeyboardAvoidingView
       style={[styles.container, { paddingTop: insets.top }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={insets.bottom + 80}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
     >
       <View style={styles.header}>
         <Text style={styles.headerTitle}>SYSTEM INTERFACE</Text>
@@ -62,7 +62,9 @@ export default function ChatScreen() {
         data={messages}
         keyExtractor={m => String(m.id)}
         renderItem={renderItem}
-        contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 100 }]}
+        contentContainerStyle={styles.list}
+        keyboardShouldPersistTaps="handled"
+        onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
         ListEmptyComponent={
           <View style={styles.welcome}>
             <Text style={styles.welcomeIcon}>◈</Text>
@@ -78,7 +80,7 @@ export default function ChatScreen() {
         </View>
       )}
 
-      <View style={[styles.inputBar, { paddingBottom: insets.bottom + 8 }]}>
+      <View style={[styles.inputBar, { paddingBottom: insets.bottom + 72 }]}>
         <TextInput
           style={styles.input}
           value={input}
@@ -87,10 +89,12 @@ export default function ChatScreen() {
           placeholderTextColor={colors.textDim}
           multiline
           maxLength={500}
-          onSubmitEditing={send}
-          blurOnSubmit={false}
         />
-        <TouchableOpacity style={[styles.sendBtn, sending && styles.sendBtnDisabled]} onPress={send} disabled={sending}>
+        <TouchableOpacity
+          style={[styles.sendBtn, (!input.trim() || sending) && styles.sendBtnDisabled]}
+          onPress={send}
+          disabled={!input.trim() || sending}
+        >
           <Text style={styles.sendBtnText}>▶</Text>
         </TouchableOpacity>
       </View>
@@ -103,8 +107,8 @@ const styles = StyleSheet.create({
   header:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 14, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border },
   headerTitle:  { fontSize: 10, fontWeight: '700', color: colors.text, letterSpacing: 1.4 },
   headerSub:    { fontSize: 10, color: colors.textDim, letterSpacing: 0.8 },
-  list:         { padding: 14, gap: 10 },
-  welcome:      { alignItems: 'center', justifyContent: 'center', marginTop: 80, gap: 10 },
+  list:         { padding: 14, gap: 10, flexGrow: 1 },
+  welcome:      { flex: 1, alignItems: 'center', justifyContent: 'center', marginTop: 80, gap: 10 },
   welcomeIcon:  { fontSize: 28, color: colors.textMuted, opacity: 0.25 },
   welcomeText:  { fontSize: 12, color: colors.textMuted, letterSpacing: 0.5 },
   msgWrap:      { maxWidth: '80%' },

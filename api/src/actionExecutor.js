@@ -3,7 +3,7 @@
 
 import {
   createTask, createTemplate, completeTask, skipTask, cancelTask,
-  moveTask, editTask, getTasksForDate, generateDescription
+  moveTask, editTask, getTasksForDate, generateDescription, createShopItem
 } from './dbAgent.js'
 import { calculateCompletion } from './rpgEngine.js'
 import { projectTask } from './projectionEngine.js'
@@ -81,6 +81,15 @@ export async function executeActions(actions, playerState, userMessage = null) {
 
         case 'edit_task':
           result = await editTask(action.task_id, action.fields ?? {})
+          break
+
+        case 'create_shop_item':
+          result = await createShopItem({
+            name:        action.name,
+            description: action.description ?? '',
+            cost_gold:   action.cost_gold   ?? 10,
+            type:        action.item_type   ?? 'leisure'
+          })
           break
 
         default:
