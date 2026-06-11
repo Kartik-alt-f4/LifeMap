@@ -14,7 +14,7 @@ import {
   getPlayerState, getTasksForDate, createTask, createTemplate, editTask,
   skipTask, cancelTask, completeTask, getTemplates, deactivateTemplate,
   getSkills, getStats, getShopWithCounts, buyItem,
-  getSnapshots, getCalendar, savePushToken
+  getSnapshots, getCalendar, savePushToken, logLeisure, getTodayLeisure
 } from './dbAgent.js'
 import { calculateCompletion } from './rpgEngine.js'
 
@@ -283,6 +283,19 @@ app.patch('/stats/:id', async (req, res) => {
   } catch (e) { res.status(400).json({ error: e.message }) }
 })
 app.get('/shop',      async (_, res) => { try { res.json(await getShopWithCounts()) }   catch (e) { res.status(500).json({ error: e.message }) } })
+
+app.get('/leisure/today', async (_, res) => {
+  try { res.json(await getTodayLeisure()) }
+  catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+app.post('/leisure/log', async (req, res) => {
+  try {
+    const { shop_item_id, quantity, unit, notes } = req.body
+    if (!shop_item_id) return res.status(400).json({ error: 'shop_item_id required' })
+    res.json(await logLeisure(shop_item_id, quantity ?? 1, unit ?? null, notes ?? null))
+  } catch (e) { res.status(400).json({ error: e.message }) }
+})
 app.get('/snapshots', async (_, res) => { try { res.json(await getSnapshots()) }        catch (e) { res.status(500).json({ error: e.message }) } })
 app.get('/calendar',  async (req, res) => {
   try {

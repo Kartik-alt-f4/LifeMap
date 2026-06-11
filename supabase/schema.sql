@@ -36,7 +36,8 @@ CREATE TABLE daily_state (
   streak_multiplier float   NOT NULL DEFAULT 1.0,
   morning_ran       bool    NOT NULL DEFAULT false,
   eod_ran           bool    NOT NULL DEFAULT false,
-  day_off_granted   bool    NOT NULL DEFAULT false
+  day_off_granted       bool    NOT NULL DEFAULT false,
+  free_leisure_today    bool    NOT NULL DEFAULT false
 );
 
 
@@ -213,7 +214,9 @@ CREATE TABLE shop_item (
   name        text    NOT NULL,
   description text    NOT NULL,
   cost_gold   int     NOT NULL CHECK (cost_gold > 0),
-  type        text    NOT NULL CHECK (type IN ('leisure','day_off')),
+  type           text    NOT NULL CHECK (type IN ('leisure','day_off','day_off_plus')),
+  tracking_unit  text    NOT NULL DEFAULT 'none'
+                 CHECK (tracking_unit IN ('none','count','minutes','boolean')),
   active      bool    NOT NULL DEFAULT true
 );
 
@@ -229,6 +232,22 @@ CREATE POLICY purchase_no_update ON purchase_log FOR UPDATE USING (false);
 CREATE POLICY purchase_no_delete ON purchase_log FOR DELETE USING (false);
 
 
+-- ── LEISURE LOG ─────────────────────────────────────────────────────────────
+-- Tracks leisure usage — logged on purchase or manually via chat/UI counter.
+CREATE TABLE leisure_log (
+  id           serial    PRIMARY KEY,
+  shop_item_id int       NOT NULL REFERENCES shop_item(id) ON DELETE RESTRICT,
+  quantity     float     NOT NULL DEFAULT 1,
+  unit         text      NOT NULL DEFAULT 'count'
+               CHECK (unit IN ('count','minutes','boolean')),
+  notes        text,
+  logged_at    timestamp NOT NULL DEFAULT now()
+);
+
+CREATE INDEX leisure_log_item_idx ON leisure_log(shop_item_id);
+CREATE INDEX leisure_log_date_idx ON leisure_log(logged_at);
+
+
 -- ── DAILY SNAPSHOT ────────────────────────────────────────────────────────────
 CREATE TABLE daily_snapshot (
   id              serial    PRIMARY KEY,
@@ -242,6 +261,7 @@ CREATE TABLE daily_snapshot (
   mandatory_met   bool,
   tasks_completed int,
   tasks_skipped   int,
+  leisure_summary jsonb,
   created_at      timestamp NOT NULL DEFAULT now()
 );
 

@@ -47,16 +47,16 @@ BEGIN
   SET status = 'completed', completed_at = now()
   WHERE id = p_task_id;
 
-  -- 2. Award XP and gold to player
+  -- 2. Award XP and gold — COALESCE guards against null columns after reset
   UPDATE player
-  SET current_xp     = p_new_xp,
-      xp_to_next     = p_new_xp_to_next,
-      current_level  = p_new_level,
-      total_gold     = total_gold     + p_gold_gained,
-      available_gold = available_gold + p_gold_gained
+  SET current_xp     = COALESCE(p_new_xp, 0),
+      xp_to_next     = COALESCE(p_new_xp_to_next, 100),
+      current_level  = COALESCE(p_new_level, 1),
+      total_gold     = COALESCE(total_gold, 0)     + COALESCE(p_gold_gained, 0),
+      available_gold = COALESCE(available_gold, 0) + COALESCE(p_gold_gained, 0)
   WHERE id = 1;
 
-  -- 3. XP ledger entry (player target)
+  -- 3. XP ledger
   INSERT INTO xp_ledger (
     source_task_id, amount, target_type, target_id,
     streak_multiplier_applied, timestamp
@@ -65,7 +65,7 @@ BEGIN
     p_streak_mult, now()
   );
 
-  -- 4. Gold ledger entry
+  -- 4. Gold ledger
   INSERT INTO gold_ledger (source_task_id, amount, direction, reason)
   VALUES (p_task_id, p_gold_gained, 'credit', 'task_completion');
 
@@ -76,13 +76,13 @@ BEGIN
 
   -- 6. Energy drain
   UPDATE energy_state
-  SET current = GREATEST(0, current - p_energy_drain)
+  SET current = GREATEST(0, COALESCE(current, 100) - p_energy_drain)
   WHERE id = 1;
 
   -- 7. Recovery restore
   IF p_is_recovery THEN
     UPDATE energy_state
-    SET current = LEAST(max, current + 15)
+    SET current = LEAST(max, COALESCE(current, 100) + 15)
     WHERE id = 1;
   END IF;
 
@@ -104,7 +104,7 @@ BEGIN
     UPDATE daily_state SET day_off_granted = true WHERE id = 1;
   END IF;
 
-  -- 10. Return result for client narration
+  -- 10. Return result
   RETURN jsonb_build_object(
     'task_id',      p_task_id,
     'task_type',    v_task_type,
@@ -137,7 +137,9 @@ DECLARE
   v_item_name      text;
   v_item_active    boolean;
   v_item_type      text;
+  v_free_leisure   bool := false;
 BEGIN
+
   SELECT name, active, type
   INTO v_item_name, v_item_active, v_item_type
   FROM shop_item
@@ -150,22 +152,41 @@ BEGIN
     RAISE EXCEPTION 'Item not available: %', v_item_name;
   END IF;
 
-  SELECT available_gold INTO v_available_gold FROM player WHERE id = 1;
+  -- Check if leisure is free today (Day Off+ was purchased)
+  SELECT free_leisure_today INTO v_free_leisure FROM daily_state WHERE id = 1;
 
-  IF v_available_gold < p_gold_cost THEN
-    RAISE EXCEPTION 'Insufficient gold. Have: %, Need: %', v_available_gold, p_gold_cost;
+  -- Skip gold check for leisure items on Day Off+ days
+  IF NOT (v_item_type = 'leisure' AND v_free_leisure) THEN
+    SELECT available_gold INTO v_available_gold FROM player WHERE id = 1;
+    IF v_available_gold < p_gold_cost THEN
+      RAISE EXCEPTION 'Insufficient gold. Have: %, Need: %', v_available_gold, p_gold_cost;
+    END IF;
+    UPDATE player SET available_gold = available_gold - p_gold_cost WHERE id = 1;
+    INSERT INTO gold_ledger (source_task_id, amount, direction, reason)
+    VALUES (NULL, p_gold_cost, 'debit', 'shop_purchase:' || v_item_name);
   END IF;
 
-  -- Deduct available_gold only (total_gold is lifetime earned, never decremented)
-  UPDATE player SET available_gold = available_gold - p_gold_cost WHERE id = 1;
+  INSERT INTO purchase_log (shop_item_id, gold_spent)
+  VALUES (p_item_id, CASE WHEN v_item_type = 'leisure' AND v_free_leisure THEN 0 ELSE p_gold_cost END);
 
-  INSERT INTO purchase_log (shop_item_id, gold_spent) VALUES (p_item_id, p_gold_cost);
-
-  INSERT INTO gold_ledger (source_task_id, amount, direction, reason)
-  VALUES (NULL, p_gold_cost, 'debit', 'shop_purchase:' || v_item_name);
+  -- Log leisure usage automatically on purchase
+  IF v_item_type IN ('leisure', 'day_off_plus') THEN
+    INSERT INTO leisure_log (shop_item_id, quantity, unit)
+    SELECT p_item_id, 1,
+      COALESCE(NULLIF(tracking_unit, 'none'), 'count')
+    FROM shop_item WHERE id = p_item_id;
+  END IF;
 
   IF v_item_type = 'day_off' THEN
     UPDATE daily_state SET mandatory_met = true, day_off_granted = true WHERE id = 1;
+  END IF;
+
+  IF v_item_type = 'day_off_plus' THEN
+    UPDATE daily_state SET
+      mandatory_met      = true,
+      day_off_granted    = true,
+      free_leisure_today = true
+    WHERE id = 1;
   END IF;
 
   RETURN jsonb_build_object(
@@ -221,13 +242,14 @@ LANGUAGE plpgsql
 AS $$
 BEGIN
   UPDATE daily_state SET
-    date              = CURRENT_DATE + 1,
-    mandatory_met     = false,
-    morning_ran       = false,
-    eod_ran           = true,    -- stays true until next morning resets it
-    day_off_granted   = false,
-    day_streak        = p_new_streak,
-    streak_multiplier = p_streak_mult
+    date               = CURRENT_DATE + 1,
+    mandatory_met      = false,
+    morning_ran        = false,
+    eod_ran            = true,
+    day_off_granted    = false,
+    free_leisure_today = false,
+    day_streak         = p_new_streak,
+    streak_multiplier  = p_streak_mult
   WHERE id = 1;
 END;
 $$;
@@ -268,4 +290,3 @@ BEGIN
   RETURN spawned;
 END;
 $$;
-

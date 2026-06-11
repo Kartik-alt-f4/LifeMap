@@ -31,10 +31,11 @@ export async function getPlayerState() {
       max:             e.max,
       threshold_label: e.threshold_label
     },
-    streak:          d.day_streak,
-    mandatory_met:   d.mandatory_met,
-    day_off_granted: d.day_off_granted,
-    date:            d.date
+    streak:             d.day_streak,
+    mandatory_met:      d.mandatory_met,
+    day_off_granted:    d.day_off_granted,
+    free_leisure_today: d.free_leisure_today ?? false,
+    date:               d.date
   }
 }
 
@@ -323,6 +324,33 @@ export async function savePushToken(token, platform) {
     .from('push_token')
     .upsert({ id: 1, token, platform, updated_at: new Date().toISOString() })
   if (error) throw error
+}
+
+// ── Leisure log ──────────────────────────────────────────────────────────────
+export async function logLeisure(shopItemId, quantity = 1, unit = null, notes = null) {
+  // Get tracking_unit from item if not provided
+  if (!unit) {
+    const { data: item } = await supabase
+      .from('shop_item').select('tracking_unit').eq('id', shopItemId).single()
+    unit = item?.tracking_unit === 'none' ? 'count' : (item?.tracking_unit ?? 'count')
+  }
+  const { data, error } = await supabase
+    .from('leisure_log')
+    .insert({ shop_item_id: shopItemId, quantity, unit, notes })
+    .select().single()
+  if (error) throw error
+  return data
+}
+
+export async function getTodayLeisure() {
+  const today = new Date().toISOString().split('T')[0]
+  const { data, error } = await supabase
+    .from('leisure_log')
+    .select('*, shop_item(name, tracking_unit)')
+    .gte('logged_at', `${today}T00:00:00`)
+    .order('logged_at', { ascending: false })
+  if (error) throw error
+  return data || []
 }
 
 export async function getPushToken() {
