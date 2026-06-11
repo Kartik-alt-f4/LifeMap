@@ -6,62 +6,25 @@ function energyClass(label) {
 function xpPct(cur, next) { return next ? Math.min(100, Math.max(0, (cur/next)*100)) : 0 }
 
 export default function Navbar({ playerState: ps, activeModal, onOpenModal, onRefresh }) {
+  const isDayOff = ps?.day_off_granted || ps?.free_leisure_today
   const [levelOpen, setLevelOpen] = useState(false)
 
   return (
-    <nav className="navbar">
+    <nav className="navbar" style={isDayOff ? { borderBottomColor: 'rgba(62,207,142,0.35)', boxShadow: 'inset 0 -1px 0 rgba(62,207,142,0.15), 0 0 40px rgba(62,207,142,0.06)' } : {}}>
       <div className="brand" style={{ cursor:'pointer' }} onClick={() => onOpenModal(null)}>
-        <div className="brand-mark">
-          <svg
-            viewBox="0 0 64 64"
-            width="32"
-            height="32"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path
-              d="M32 4
-                L52 12
-                V28
-                C52 42 43 53 32 60
-                C21 53 12 42 12 28
-                V12
-                Z"
-              fill="white"
-              opacity="0.15"
-            />
-
-            <path
-              d="M32 10
-                L46 32
-                L32 54
-                L18 32
-                Z"
-              fill="white"
-            />
-
-            <path
-              d="M26 22
-                L32 16
-                L38 22
-                L34 22
-                L34 38
-                L40 38
-                L32 46
-                L24 38
-                L30 38
-                L30 22
-                Z"
-              fill="#0F172A"
-            />
-            
-            <circle cx="32" cy="16" r="3" fill="#0F172A"/>
-
-            <circle cx="24" cy="40" r="2.5" fill="#0F172A"/>
-            <circle cx="40" cy="40" r="2.5" fill="#0F172A"/>
-          </svg>
-        </div>
+        <div className="brand-mark">LM</div>
         <span className="brand-name">LIFE MAP</span>
+        {isDayOff && (
+          <span style={{
+            fontSize: '9px', fontWeight: 700, letterSpacing: '0.1em',
+            color: 'var(--success)', backgroundColor: 'rgba(62,207,142,0.12)',
+            border: '1px solid rgba(62,207,142,0.3)',
+            padding: '2px 7px', borderRadius: 3,
+            textTransform: 'uppercase'
+          }}>
+            {ps?.free_leisure_today ? 'Day Off+' : 'Day Off'}
+          </span>
+        )}
       </div>
 
       <div className="nav-stats">

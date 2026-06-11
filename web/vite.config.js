@@ -17,6 +17,7 @@ export default defineConfig({
       '/calendar':  'http://localhost:3001',
       '/config':    'http://localhost:3001',
       '/notifications': 'http://localhost:3001',
+      '/leisure':      'http://localhost:3001',
     }
   },
   build: { outDir: 'dist' }

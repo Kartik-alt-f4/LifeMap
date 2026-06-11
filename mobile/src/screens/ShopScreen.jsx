@@ -80,8 +80,8 @@ function ShopCard({ item, gold, freeleisure, onBuy, onLog, buying, logging, toda
             </TouchableOpacity>
           )}
 
-          {/* Log counter — leisure items only */}
-          {isLeisure && (
+          {/* Log counter — only on Day Off+ days */}
+          {isLeisure && freeleisure && (
             <View style={styles.counterWrap}>
               {todayCount > 0 && (
                 <Text style={styles.countBadge}>

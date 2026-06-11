@@ -105,7 +105,10 @@ export default function TodayScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Player header */}
       {player && (
-        <View style={styles.header}>
+        <View style={[
+          styles.header,
+          (player.day_off_granted || player.free_leisure_today) && styles.headerDayOff
+        ]}>
           <View style={styles.headerTop}>
             <View>
               <Text style={styles.levelText}>Lv.{player.level} <Text style={styles.rankText}>{player.rank}</Text></Text>
@@ -115,7 +118,14 @@ export default function TodayScreen() {
           <StatBar label="XP"     value={player.current_xp}     max={player.xp_to_next}  color={colors.accent} />
           <StatBar label="Energy" value={player.energy?.current} max={player.energy?.max} color={colors.accent} />
           <View style={styles.headerBottom}>
-            <Text style={styles.streakText}>{player.streak > 0 ? '🔥' : ''} {player.streak}d streak</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={styles.streakText}>{player.streak > 0 ? '🔥' : ''} {player.streak}d streak</Text>
+              {(player.day_off_granted || player.free_leisure_today) && (
+                <Text style={styles.dayOffBadge}>
+                  {player.free_leisure_today ? 'DAY OFF+' : 'DAY OFF'}
+                </Text>
+              )}
+            </View>
             <Text style={styles.summaryText}>{pending} pending · {completed} done</Text>
           </View>
         </View>
@@ -174,5 +184,7 @@ const styles = StyleSheet.create({
   tag:          { fontSize: 10, color: colors.textMuted },
   chevron:      { fontSize: 18, color: colors.textDim },
   empty:        { textAlign: 'center', color: colors.textMuted, marginTop: 60, fontSize: 13 },
+  headerDayOff: { borderBottomColor: 'rgba(62,207,142,0.35)', backgroundColor: 'rgba(62,207,142,0.04)' },
+  dayOffBadge:  { fontSize: 9, fontWeight: '700', color: '#3ecf8e', backgroundColor: 'rgba(62,207,142,0.12)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 3, borderWidth: 1, borderColor: 'rgba(62,207,142,0.3)', letterSpacing: 0.5 },
 
 })
