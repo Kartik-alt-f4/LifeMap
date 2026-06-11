@@ -268,6 +268,21 @@ app.post('/chat', async (req, res) => {
 // SKILLS / STATS / SHOP / GRAPHS
 // ─────────────────────────────────────────────────────────────────────────────
 app.get('/skills',    async (_, res) => { try { res.json(await getSkills()) }           catch (e) { res.status(500).json({ error: e.message }) } })
+
+app.patch('/skills/:id', async (req, res) => {
+  try {
+    const { name, description } = req.body
+    if (!name?.trim() && !description?.trim()) return res.status(400).json({ error: 'name or description required' })
+    const { supabase } = await import('./supabaseClient.js')
+    const update = {}
+    if (name?.trim())        update.name        = name.trim()
+    if (description?.trim()) update.description = description.trim()
+    const { data, error } = await supabase
+      .from('skill').update(update).eq('id', parseInt(req.params.id)).select().single()
+    if (error) throw error
+    res.json(data)
+  } catch (e) { res.status(400).json({ error: e.message }) }
+})
 app.get('/stats',     async (_, res) => { try { res.json(await getStats()) }            catch (e) { res.status(500).json({ error: e.message }) } })
 
 app.patch('/stats/:id', async (req, res) => {
@@ -281,38 +296,6 @@ app.patch('/stats/:id', async (req, res) => {
     if (error) throw error
     res.json(data)
   } catch (e) { res.status(400).json({ error: e.message }) }
-})
-
-// Re-embed all stats after description update — called automatically by Settings UI
-app.post('/stats/re-embed', async (req, res) => {
-  try {
-    const { supabase } = await import('./supabaseClient.js')
-    const { GoogleGenerativeAI } = await import('@google/generative-ai')
-    const { getServer } = await import('./configLoader.js')
-
-    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY)
-    const model = getServer().model.embedding_model
-
-    const { data: stats, error } = await supabase
-      .from('stat').select('id, name, description')
-    if (error) throw error
-
-    let updated = 0
-    for (const stat of stats) {
-      if (!stat.description) continue
-      const text   = `${stat.name}. ${stat.description}`
-      const result = await genAI.getGenerativeModel({ model }).embedContent(text)
-      const vec    = result.embedding.values
-      await supabase.from('stat').update({ embedding_vector: vec }).eq('id', stat.id)
-      updated++
-      console.log(`[embed] ${stat.name} re-embedded (${vec.length}d)`)
-    }
-
-    res.json({ updated, message: `${updated} stat(s) re-embedded` })
-  } catch (e) {
-    console.error('[embed] re-embed failed:', e.message)
-    res.status(500).json({ error: e.message })
-  }
 })
 app.get('/shop',      async (_, res) => { try { res.json(await getShopWithCounts()) }   catch (e) { res.status(500).json({ error: e.message }) } })
 app.get('/snapshots', async (_, res) => { try { res.json(await getSnapshots()) }        catch (e) { res.status(500).json({ error: e.message }) } })
