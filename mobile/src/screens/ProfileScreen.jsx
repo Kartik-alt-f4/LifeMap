@@ -7,6 +7,7 @@ import {
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { getState, getStats, getSkills } from '../api'
+import SettingsContent from '../components/SettingsContent'
 import { colors } from '../theme'
 
 const BASE = 'https://lifemap-b0ms.onrender.com'
@@ -333,32 +334,7 @@ export default function ProfileScreen() {
                 <Text style={sp.closeX}>✕</Text>
               </TouchableOpacity>
             </View>
-            <ScrollView contentContainerStyle={{ gap: 16 }}>
-              <View>
-                <Text style={sp.sectionTitle}>STAT MATCHING</Text>
-                <Text style={sp.sectionHint}>
-                  Edit stat descriptions in the Profile page by tapping any stat card.
-                  Better descriptions = better task→stat matching.
-                </Text>
-              </View>
-              <View>
-                <Text style={sp.sectionTitle}>RE-EMBED STATS</Text>
-                <Text style={sp.sectionHint}>After editing stat descriptions, tap Save & re-embed on each card.</Text>
-              </View>
-              <View>
-                <Text style={sp.sectionTitle}>RESET</Text>
-                <Text style={sp.sectionHint}>
-                  To reset game data, run from your terminal:{'\n'}
-                  <Text style={{ fontFamily: 'monospace', color: '#7b6ef6' }}>cd api && node ../scripts/reset.js</Text>
-                </Text>
-              </View>
-              <View>
-                <Text style={sp.sectionTitle}>API ENDPOINT</Text>
-                <Text style={[sp.sectionHint, { fontFamily: 'monospace', color: '#7b6ef6', fontSize: 11 }]}>
-                  https://lifemap-b0ms.onrender.com
-                </Text>
-              </View>
-            </ScrollView>
+            <SettingsContent onClose={() => setShowSettings(false)} />
           </View>
         </View>
       </Modal>

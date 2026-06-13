@@ -1,5 +1,5 @@
 // src/screens/TodayScreen.jsx
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   RefreshControl, ActivityIndicator
@@ -92,25 +92,29 @@ export default function TodayScreen() {
     return dt.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' })
   }
 
-  const load = useCallback(async () => {
+  const load = async (d = date) => {
     try {
-      const [state, taskData] = await Promise.all([getState(), getTasks(isToday ? undefined : date)])
+      const today = todayStr()
+      const [state, taskData] = await Promise.all([
+        getState(),
+        getTasks(d === today ? undefined : d)
+      ])
       setPlayer(state)
       setTasks(taskData)
     } catch (e) { console.error(e) }
     finally { setLoading(false); setRefreshing(false) }
-  }, [])
+  }
 
-  useEffect(() => { load() }, [load, date])
+  useEffect(() => { load(date) }, [date])
 
   const handleComplete = async (id) => {
-    try { await completeTask(id); await load() } catch (e) { console.error(e) }
+    try { await completeTask(id); await load(date) } catch (e) { console.error(e) }
   }
   const handleSkip = async (id) => {
-    try { await skipTask(id); await load() } catch (e) { console.error(e) }
+    try { await skipTask(id); await load(date) } catch (e) { console.error(e) }
   }
   const handleCancel = async (id) => {
-    try { await cancelTask(id); await load() } catch (e) { console.error(e) }
+    try { await cancelTask(id); await load(date) } catch (e) { console.error(e) }
   }
 
   const pending   = tasks.filter(t => t.status === 'pending').length
@@ -172,7 +176,7 @@ export default function TodayScreen() {
         keyExtractor={t => String(t.id)}
         renderItem={({ item }) => <TaskRow task={item} onPress={setSelected} />}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load() }} tintColor={colors.accent} />
+          <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(date) }} tintColor={colors.accent} />
         }
         ListEmptyComponent={<Text style={styles.empty}>No tasks today.</Text>}
         contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
@@ -185,7 +189,7 @@ export default function TodayScreen() {
         onComplete={handleComplete}
         onSkip={handleSkip}
         onCancel={handleCancel}
-        onEdited={() => { setSelected(null); load() }}
+        onEdited={() => { setSelected(null); load(date) }}
       />
     </View>
   )
