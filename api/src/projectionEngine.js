@@ -49,7 +49,7 @@ async function nameSkill(titles) {
   const apiKey = process.env.GOOGLE_API_KEY
   const model  = getServer().model.name
   const url    = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
-  const prompt = `These tasks were completed repeatedly:\n${titles.map(t => `- ${t}`).join('\n')}\n\nName a skill (1-3 words). Return only the skill name.`
+  const prompt = `A user repeatedly completed these tasks:\n${titles.map(t => `- ${t}`).join('\n')}\n\nWhat specific skill are they building? Give it a precise, concrete name (1-3 words) based on the actual activity — e.g. "Guitar Practice", "Strength Training", "Deep Work", "Coding". Do NOT say "Task Management" or anything generic. Return ONLY the skill name, nothing else.`
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -178,7 +178,7 @@ export async function projectTask(taskId) {
       { task_id: taskId, stat_id: s.id, similarity_score: sim },
       { onConflict: 'task_id,stat_id', ignoreDuplicates: true }
     )
-    console.log(`[projection] stat ${s.name}\n+${xpAmt.toFixed(2)}\n(sim:${sim.toFixed(3)})`)
+    console.log(`\n[projection] stat ${s.name} +\n${xpAmt.toFixed(2)} (sim:\n${sim.toFixed(3)})\n`)
   }
 
   // ── Skill projection ─────────────────────────────────────────────────────
@@ -200,7 +200,7 @@ export async function projectTask(taskId) {
     const xpAmt = baseXp * getProjectionMultiplier(sim, cfg.skills.projection_tiers)
     await awardSkillXP(taskId, sk.id, xpAmt, sim, task.completed_at)
     matchedSkills.push({ id: sk.id, centroid: parseVec(sk.centroid_vector), parentId: sk.parent_skill_id })
-    console.log('[projection] skill id:' + sk.id + '\n+' + xpAmt.toFixed(2) + '\n(sim:' + sim.toFixed(3) + ')')
+    console.log(`\n[projection] skill id:\n${sk.id} +\n${xpAmt.toFixed(2)} (sim:\n${sim.toFixed(3)})\n`)
   }
 
   // ── Skill candidate bucket — runs independently of stat projection ─────────

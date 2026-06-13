@@ -71,21 +71,14 @@ export default function SettingsContent({ onClose }) {
   const [saving,   setSaving]   = useState(false)
   const [saved,    setSaved]    = useState(false)
 
-  // Stat descriptions
-  const [statDefs,   setStatDefs]   = useState([])
-  const [statSaving, setStatSaving] = useState(false)
-  const [statStatus, setStatStatus] = useState('')
+
 
   useEffect(() => {
-    Promise.all([
-      req('/config'),
-      req('/stats')
-    ]).then(([cfg, stats]) => {
+    req('/config').then(cfg => {
       setConfig(cfg)
       setXpBase({ ...cfg.game.tasks.xp_base })
       setGoldBase({ ...cfg.game.tasks.gold_base })
       setEnergy({ ...cfg.game.energy })
-      setStatDefs(stats.map(s => ({ ...s, _desc: s.description ?? '' })))
       setLoading(false)
     }).catch(e => { Alert.alert('Error', e.message); setLoading(false) })
   }, [])
@@ -103,24 +96,11 @@ export default function SettingsContent({ onClose }) {
     finally { setSaving(false) }
   }
 
-  const saveStats = async () => {
-    setStatSaving(true); setStatStatus('saving')
-    try {
-      await Promise.all(statDefs.map(s =>
-        req(`/stats/${s.id}`, { method: 'PATCH', body: JSON.stringify({ description: s._desc }) })
-      ))
-      setStatStatus('embedding')
-      await req('/stats/re-embed', { method: 'POST' })
-      setStatStatus('done')
-      setTimeout(() => setStatStatus(''), 3000)
-    } catch (e) { setStatStatus('error'); Alert.alert('Error', e.message) }
-    finally { setStatSaving(false) }
-  }
+
 
   const TABS = [
     { id: 'tasks',  label: 'Tasks' },
     { id: 'energy', label: 'Energy' },
-    { id: 'stats',  label: 'Stats' },
   ]
 
   if (loading) return (
@@ -185,41 +165,7 @@ export default function SettingsContent({ onClose }) {
           </>
         )}
 
-        {tab === 'stats' && (
-          <>
-            <Text style={s.hint}>
-              Richer descriptions = better task→stat matching. Tap Save & re-embed after editing.
-            </Text>
-            {statDefs.map((stat, idx) => (
-              <View key={stat.id} style={s.statBlock}>
-                <Text style={s.statName}>{stat.name.toUpperCase()}</Text>
-                <TextInput
-                  style={s.statInput}
-                  value={stat._desc}
-                  onChangeText={v => setStatDefs(prev =>
-                    prev.map((s, i) => i === idx ? { ...s, _desc: v } : s)
-                  )}
-                  multiline
-                  placeholderTextColor={colors.textDim}
-                  placeholder="e.g. Physical training, gym, weightlifting..."
-                />
-              </View>
-            ))}
-            <TouchableOpacity
-              style={[s.saveBtn, statStatus === 'done' && { backgroundColor: colors.success }]}
-              onPress={saveStats}
-              disabled={statSaving}
-            >
-              <Text style={s.saveBtnText}>
-                {statStatus === 'saving'    ? 'Saving…'
-                : statStatus === 'embedding' ? 'Embedding…'
-                : statStatus === 'done'      ? '✓ Done'
-                : statStatus === 'error'     ? 'Error — retry'
-                : 'Save & re-embed'}
-              </Text>
-            </TouchableOpacity>
-          </>
-        )}
+        {/* Stats editing is done via Profile → tap any stat card */}
 
       </ScrollView>
     </View>

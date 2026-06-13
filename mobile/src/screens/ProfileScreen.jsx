@@ -8,6 +8,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { getState, getStats, getSkills } from '../api'
 import SettingsContent from '../components/SettingsContent'
+import GraphsScreen from './GraphsScreen'
 import { colors } from '../theme'
 
 const BASE = 'https://lifemap-b0ms.onrender.com'
@@ -157,6 +158,7 @@ export default function ProfileScreen() {
   const [editTarget,   setEditTarget]   = useState(null)
   const [saving,       setSaving]       = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [showGraphs,   setShowGraphs]   = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -257,13 +259,15 @@ export default function ProfileScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      {/* Settings button */}
-      <TouchableOpacity
-        style={[sp.settingsBtn, { top: insets.top + 8 }]}
-        onPress={() => setShowSettings(true)}
-      >
-        <Text style={sp.settingsIcon}>⚙</Text>
-      </TouchableOpacity>
+      {/* Header buttons */}
+      <View style={[sp.headerBtns, { top: insets.top + 8 }]}>
+        <TouchableOpacity style={sp.iconBtn} onPress={() => setShowGraphs(true)}>
+          <Text style={sp.iconText}>📊</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={sp.iconBtn} onPress={() => setShowSettings(true)}>
+          <Text style={sp.iconText}>⚙</Text>
+        </TouchableOpacity>
+      </View>
 
       <ScrollView
         contentContainerStyle={{ padding: 14, gap: 14, paddingBottom: insets.bottom + 80 }}
@@ -322,6 +326,19 @@ export default function ProfileScreen() {
           ))
         }
       </ScrollView>
+
+      {/* Graphs modal */}
+      <Modal visible={showGraphs} transparent={false} animationType="slide" onRequestClose={() => setShowGraphs(false)}>
+        <View style={{ flex: 1, backgroundColor: colors.bg }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, paddingTop: 50, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+            <Text style={{ fontSize: 10, fontWeight: '700', color: colors.textMuted, letterSpacing: 1.4 }}>GRAPHS</Text>
+            <TouchableOpacity onPress={() => setShowGraphs(false)}>
+              <Text style={{ fontSize: 16, color: colors.textMuted }}>✕</Text>
+            </TouchableOpacity>
+          </View>
+          <GraphsScreen embedded />
+        </View>
+      </Modal>
 
       {/* Settings modal */}
       <Modal visible={showSettings} transparent animationType="slide" onRequestClose={() => setShowSettings(false)}>
@@ -421,10 +438,11 @@ const styles = StyleSheet.create({
 
 // Settings panel styles
 const sp = StyleSheet.create({
-  settingsBtn:  { position: 'absolute', right: 14, zIndex: 10, width: 34, height: 34, borderRadius: 17, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
-  settingsIcon: { fontSize: 16, color: colors.textMuted },
+  headerBtns:   { position: 'absolute', right: 14, zIndex: 10, flexDirection: 'row', gap: 8 },
+  iconBtn:      { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  iconText:     { fontSize: 14 },
   overlay:      { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.65)' },
-  sheet:        { backgroundColor: colors.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingTop: 12, maxHeight: '80%', borderTopWidth: 1, borderColor: colors.borderHi },
+  sheet:        { backgroundColor: colors.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingTop: 12, height: '92%', borderTopWidth: 1, borderColor: colors.borderHi, overflow: 'hidden' },
   handle:       { width: 36, height: 4, backgroundColor: colors.border, borderRadius: 2, alignSelf: 'center', marginBottom: 14 },
   sheetHeader:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
   sheetTitle:   { fontSize: 14, fontWeight: '700', color: colors.text },
