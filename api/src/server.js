@@ -378,6 +378,32 @@ app.post('/register', async (req, res) => {
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
+// GEMINI KEY VALIDATION — called by setup wizard (avoids CORS on client side)
+// ─────────────────────────────────────────────────────────────────────────────
+app.post('/validate-gemini', async (req, res) => {
+  try {
+    const { key } = req.body
+    if (!key) return res.status(400).json({ error: 'key required' })
+ 
+    const r = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${key}`,
+      {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ contents: [{ parts: [{ text: 'ping' }] }] }),
+      }
+    )
+    const data = await r.json().catch(() => ({}))
+    if (r.status === 400 && data?.error?.status === 'API_KEY_INVALID') {
+      return res.status(400).json({ error: 'Invalid Gemini key' })
+    }
+    res.json({ ok: true })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
 // CRON ENDPOINTS (GitHub Actions only)
 // ─────────────────────────────────────────────────────────────────────────────
 app.post('/cron/morning', cronAuth, async (_, res) => {

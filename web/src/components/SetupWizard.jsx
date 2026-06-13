@@ -24,20 +24,18 @@ function getFirebase() {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-async function validateGeminiKey(key) {
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${key}`,
-    {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ contents: [{ parts: [{ text: 'ping' }] }] }),
-      signal:  AbortSignal.timeout(10000),
-    }
-  )
-  const data = await res.json().catch(() => ({}))
-  // Only fail on explicit invalid key — quota errors (429) and other codes mean key is valid
-  if (res.status === 400 && data?.error?.status === 'API_KEY_INVALID') {
-    throw new Error('Invalid Gemini key — check it and try again')
+async function validateGeminiKey(key, renderUrl) {
+  // Validate via our own server to avoid CORS issues with direct Gemini calls
+  const base = renderUrl ? renderUrl.replace(/\/$/, '') : 'https://lifemap-b0ms.onrender.com'
+  const res  = await fetch(`${base}/validate-gemini`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ key }),
+    signal:  AbortSignal.timeout(15000),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error ?? 'Invalid Gemini key')
   }
   return true
 }
@@ -168,7 +166,7 @@ function StepGemini({ onDone, onBack }) {
     if (!key.trim()) return
     setLoading(true); setError('')
     try {
-      await validateGeminiKey(key.trim())
+      await validateGeminiKey(key.trim(), null)
       onDone({ geminiKey: key.trim() })
     } catch (e) {
       setError('Key invalid or quota exceeded. Double-check it and try again.')
