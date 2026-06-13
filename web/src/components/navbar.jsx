@@ -5,14 +5,14 @@ function energyClass(label) {
 }
 function xpPct(cur, next) { return next ? Math.min(100, Math.max(0, (cur/next)*100)) : 0 }
 
-export default function Navbar({ playerState: ps, activeModal, onOpenModal, onRefresh }) {
+export default function Navbar({ playerState: ps, activeModal, onOpenModal, onRefresh, onAddTask }) {
   const isDayOff = ps?.day_off_granted || ps?.free_leisure_today
   const [levelOpen, setLevelOpen] = useState(false)
 
   return (
     <nav className="navbar" style={isDayOff ? { borderBottomColor: 'rgba(62,207,142,0.35)', boxShadow: 'inset 0 -1px 0 rgba(62,207,142,0.15), 0 0 40px rgba(62,207,142,0.06)' } : {}}>
       <div className="brand" style={{ cursor:'pointer' }} onClick={() => onOpenModal(null)}>
-        <div className="brand-mark">LM</div>
+        <div className="brand-mark" />
         <span className="brand-name">LIFE MAP</span>
         {isDayOff && (
           <span style={{
@@ -27,8 +27,8 @@ export default function Navbar({ playerState: ps, activeModal, onOpenModal, onRe
         )}
       </div>
 
-      <div className="nav-stats">
-        {/* Energy */}
+      {/* Stats — hidden on mobile via CSS */}
+      <div className="nav-stats desktop-only">
         <div className={`nav-stat ${ps ? energyClass(ps.energy?.threshold_label) : ''}`}>
           <div>
             <div className="stat-label">Energy</div>
@@ -42,7 +42,6 @@ export default function Navbar({ playerState: ps, activeModal, onOpenModal, onRe
         </div>
         <div className="nav-divider" />
 
-        {/* Streak */}
         <div className="nav-stat">
           <div>
             <div className="stat-label">Streak</div>
@@ -53,7 +52,6 @@ export default function Navbar({ playerState: ps, activeModal, onOpenModal, onRe
         </div>
         <div className="nav-divider" />
 
-        {/* Level */}
         <div className="nav-stat" style={{ position:'relative', cursor:'pointer' }}
           onClick={() => setLevelOpen(o => !o)}>
           <div>
@@ -100,7 +98,6 @@ export default function Navbar({ playerState: ps, activeModal, onOpenModal, onRe
         </div>
         <div className="nav-divider" />
 
-        {/* Gold */}
         <div className="nav-stat">
           <div>
             <div className="stat-label">Gold</div>
@@ -109,8 +106,9 @@ export default function Navbar({ playerState: ps, activeModal, onOpenModal, onRe
         </div>
       </div>
 
-      <div className="nav-actions">
-        <button className="nav-btn nav-btn-add" data-addtask="true">
+      {/* Nav actions — hidden on mobile via CSS */}
+      <div className="nav-actions desktop-only">
+        <button className="nav-btn nav-btn-add" onClick={onAddTask}>
           + Add task
         </button>
         {[
