@@ -1,4 +1,5 @@
 name: Morning Cron
+
 on:
   schedule:
     - cron: '0 11 * * *'
@@ -8,9 +9,13 @@ jobs:
   morning:
     runs-on: ubuntu-latest
     steps:
-      - name: Run morning cron
+      - uses: actions/checkout@v4
+      - name: Run morning on all servers
         run: |
-          curl -X POST ${{ secrets.SERVER_URL }}/cron/morning \
-            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
-            -H "Content-Type: application/json" \
-            --fail --max-time 30
+          jq -r '.[].url' config/users.json | while read url; do
+            echo "Morning: $url"
+            curl -sf -X POST "$url/cron/morning" \
+              -H "x-cron-secret: ${{ secrets.MASTER_CRON_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              --max-time 30 || echo "⚠ $url failed"
+          done

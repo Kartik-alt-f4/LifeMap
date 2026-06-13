@@ -2,12 +2,17 @@ name: Health Ping
 
 on:
   schedule:
-    - cron: '*/14 * * * *'  # every 14 minutes — keeps Render free tier alive
+    - cron: '*/14 * * * *'
   workflow_dispatch:
 
 jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping server
-        run: curl -f ${{ secrets.SERVER_URL }}/health || echo "Server unavailable"
+      - uses: actions/checkout@v4
+      - name: Ping all servers
+        run: |
+          jq -r '.[].url' config/users.json | while read url; do
+            echo "Pinging $url"
+            curl -sf "$url/health" || echo "⚠ $url unavailable"
+          done

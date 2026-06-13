@@ -2,15 +2,19 @@ name: Task Reminder
 
 on:
   schedule:
-    - cron: '*/15 * * * *'  # every 15 minutes
+    - cron: '*/15 * * * *'
   workflow_dispatch:
 
 jobs:
   remind:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping remind endpoint
+      - uses: actions/checkout@v4
+      - name: Ping all servers
         run: |
-          curl -s -X POST ${{ secrets.SERVER_URL }}/cron/remind \
-            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
-            -H "Content-Type: application/json"
+          jq -r '.[].url' config/users.json | while read url; do
+            echo "Reminding $url"
+            curl -sf -X POST "$url/cron/remind" \
+              -H "x-cron-secret: ${{ secrets.MASTER_CRON_TOKEN }}" \
+              -H "Content-Type: application/json" || echo "⚠ $url failed"
+          done

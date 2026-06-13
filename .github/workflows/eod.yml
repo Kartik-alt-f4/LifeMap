@@ -1,4 +1,5 @@
 name: EOD Cron
+
 on:
   schedule:
     - cron: '0 3 * * *'
@@ -8,9 +9,13 @@ jobs:
   eod:
     runs-on: ubuntu-latest
     steps:
-      - name: Run EOD cron
+      - uses: actions/checkout@v4
+      - name: Run EOD on all servers
         run: |
-          curl -X POST ${{ secrets.SERVER_URL }}/cron/eod \
-            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
-            -H "Content-Type: application/json" \
-            --fail --max-time 30
+          jq -r '.[].url' config/users.json | while read url; do
+            echo "EOD: $url"
+            curl -sf -X POST "$url/cron/eod" \
+              -H "x-cron-secret: ${{ secrets.MASTER_CRON_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              --max-time 30 || echo "⚠ $url failed"
+          done

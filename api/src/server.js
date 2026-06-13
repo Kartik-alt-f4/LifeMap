@@ -3,8 +3,8 @@ import express       from 'express'
 import path          from 'path'
 import { fileURLToPath } from 'url'
 
-import { registerUser } from '../../scripts/register-user.js'
-import { setupSupabase } from '../../scripts/setup-supabase.js'
+import { registerUser }             from '../../scripts/register-user.js'
+import { setupSupabase, triggerEmbedSeed } from '../../scripts/setup-supabase.js'
 
 import { loadConfig, getConfig, getServer, writeConfigSection } from './configLoader.js'
 import { initGemini, runAgent } from './agentPipeline.js'

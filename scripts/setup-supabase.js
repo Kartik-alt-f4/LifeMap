@@ -1,13 +1,13 @@
 // scripts/setup-supabase.js
-// Uses Supabase Management API with a personal access token (PAT)
-// to run schema + functions + seed on a new project.
-// PAT is obtained from https://supabase.com/dashboard/account/tokens
+// Called by POST /setup-supabase on the server.
+// 1. Runs schema.sql + functions.sql + seed.sql via Supabase Management API
+// 2. Then triggers stat embedding via the server's own /setup/embed endpoint
 
 const GITHUB_RAW = 'https://raw.githubusercontent.com/Kartik-alt-f4/LifeMap/main'
 
 async function fetchSQL(filename) {
   const res = await fetch(`${GITHUB_RAW}/supabase/${filename}`)
-  if (!res.ok) throw new Error(`Failed to fetch ${filename}: ${res.status}`)
+  if (!res.ok) throw new Error(`Failed to fetch ${filename} from GitHub: ${res.status}`)
   return res.text()
 }
 
@@ -15,7 +15,7 @@ async function execSQL(projectRef, pat, sql) {
   const res = await fetch(
     `https://api.supabase.com/v1/projects/${projectRef}/database/query`,
     {
-      method: 'POST',
+      method:  'POST',
       headers: {
         'Content-Type':  'application/json',
         'Authorization': `Bearer ${pat}`,
@@ -28,7 +28,7 @@ async function execSQL(projectRef, pat, sql) {
 
   if (!res.ok) {
     const msg = data?.message ?? data?.error ?? JSON.stringify(data)
-    // Ignore already-exists errors — schema is idempotent
+    // Ignore already-exists — schema is idempotent
     if (msg.includes('already exists') || msg.includes('duplicate')) return { ok: true }
     throw new Error(msg || `HTTP ${res.status}`)
   }
@@ -58,4 +58,25 @@ export async function setupSupabase(supabaseUrl, pat) {
   }
 
   return { ok: true, steps: results, projectRef }
+}
+
+// Called after Render URL is confirmed healthy — embeds stats on the new server
+export async function triggerEmbedSeed(renderUrl) {
+  const url = renderUrl.replace(/\/$/, '')
+  try {
+    const res = await fetch(`${url}/setup/embed`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal:  AbortSignal.timeout(60000), // embedding takes ~20-30s
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      console.warn('[setup] Embed seed failed:', err.error ?? res.status)
+      return { ok: false }
+    }
+    return res.json()
+  } catch (e) {
+    console.warn('[setup] Embed seed timeout or error:', e.message)
+    return { ok: false }
+  }
 }

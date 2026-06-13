@@ -1,4 +1,5 @@
 name: Weekly Cleanup
+
 on:
   schedule:
     - cron: '0 3 * * 0'
@@ -8,9 +9,13 @@ jobs:
   cleanup:
     runs-on: ubuntu-latest
     steps:
-      - name: Run session cleanup
+      - uses: actions/checkout@v4
+      - name: Run cleanup on all servers
         run: |
-          curl -X POST ${{ secrets.SERVER_URL }}/cron/cleanup \
-            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
-            -H "Content-Type: application/json" \
-            --fail --max-time 30
+          jq -r '.[].url' config/users.json | while read url; do
+            echo "Cleanup: $url"
+            curl -sf -X POST "$url/cron/cleanup" \
+              -H "x-cron-secret: ${{ secrets.MASTER_CRON_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              --max-time 30 || echo "⚠ $url failed"
+          done

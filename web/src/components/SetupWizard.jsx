@@ -303,38 +303,40 @@ function StepSupabase({ onDone, onBack }) {
         marginBottom: 20,
       }}>
         <strong style={{ color: 'var(--text)' }}>Steps:</strong><br/>
-        1. Create account + new project at <a href="https://supabase.com" target="_blank" rel="noreferrer" style={{ color: 'var(--accent)' }}>supabase.com</a><br/>
-        2. Go to <span style={{ color: 'var(--accent)', fontFamily: 'var(--mono)' }}>Account → Access Tokens</span> → generate a token<br/>
-        3. Go to <span style={{ color: 'var(--accent)', fontFamily: 'var(--mono)' }}>Project Settings → API</span> → copy Project URL, anon key, service_role key
+        1. Create a free account + new project at <a href="https://supabase.com" target="_blank" rel="noreferrer" style={{ color: 'var(--accent)' }}>supabase.com</a><br/>
+        2. Go to <span style={{ color: 'var(--accent)', fontFamily: 'var(--mono)' }}>supabase.com/dashboard/account/tokens</span> → create an Access Token (starts with <span style={{ fontFamily: 'var(--mono)' }}>sbp_</span>)<br/>
+        3. Go to your project → <span style={{ color: 'var(--accent)', fontFamily: 'var(--mono)' }}>Settings → API</span> → copy the three values below
       </div>
 
       <div style={{ marginBottom: 6 }}>
-        <label style={s.fieldLabel}>Project URL</label>
+        <label style={s.fieldLabel}>Project URL <span style={{ color: 'var(--text-dim)', fontWeight: 400 }}>(Settings → API → Project URL)</span></label>
         <input style={s.input} type="url" placeholder="https://xxxx.supabase.co"
           value={url} onChange={e => setUrl(e.target.value)} />
       </div>
 
       <div style={{ marginBottom: 6 }}>
-        <label style={s.fieldLabel}>Personal Access Token (Account → Access Tokens)</label>
+        <label style={s.fieldLabel}>
+          Access Token <span style={{ color: 'var(--text-dim)', fontWeight: 400 }}>(account/tokens — starts with sbp_)</span>
+        </label>
         <input style={s.input} type="password" placeholder="sbp_..."
           value={pat} onChange={e => setPat(e.target.value)} />
         <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: -10, marginBottom: 16, lineHeight: 1.5 }}>
-          Used once to run the database setup. Never stored.
+          This is your <strong>personal account token</strong>, not a project key. Used once to run the schema setup. Never stored.
         </div>
       </div>
 
       <div style={{ marginBottom: 6 }}>
-        <label style={s.fieldLabel}>Anon / Public Key</label>
+        <label style={s.fieldLabel}>Anon Key <span style={{ color: 'var(--text-dim)', fontWeight: 400 }}>(Settings → API → anon public)</span></label>
         <input style={s.input} type="password" placeholder="eyJhbGciOiJIUzI1NiIs..."
           value={anonKey} onChange={e => setAnonKey(e.target.value)} />
       </div>
 
       <div style={{ marginBottom: 6 }}>
-        <label style={s.fieldLabel}>Service Role Key</label>
+        <label style={s.fieldLabel}>Service Role Key <span style={{ color: 'var(--text-dim)', fontWeight: 400 }}>(Settings → API → service_role secret)</span></label>
         <input style={s.input} type="password" placeholder="eyJhbGciOiJIUzI1NiIs..."
           value={serviceKey} onChange={e => setServiceKey(e.target.value)} />
         <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: -10, marginBottom: 16, lineHeight: 1.5 }}>
-          These will be pre-filled in your Render env vars on the next screen.
+          The anon key and service role key are both <strong>long JWT strings</strong> starting with <span style={{ fontFamily: 'var(--mono)' }}>eyJ</span> — different from the access token.
         </div>
       </div>
 
@@ -406,12 +408,27 @@ function StepRender({ data, onDone, onBack }) {
                 <CopyField label="GitHub repo URL" value="https://github.com/Kartik-alt-f4/LifeMap" />
               )}
               {step.n === '4' && (
+                <div style={{
+                  background: 'var(--bg)', border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-sm)', padding: '10px 12px',
+                  fontSize: 11, color: 'var(--text-muted)', lineHeight: 2,
+                  marginTop: 6,
+                }}>
+                  <div><span style={{ color: 'var(--text)', fontWeight: 600 }}>Branch:</span> main</div>
+                  <div><span style={{ color: 'var(--text)', fontWeight: 600 }}>Root Directory:</span> <span style={{ fontFamily: 'var(--mono)', color: 'var(--accent)' }}>api</span></div>
+                  <div><span style={{ color: 'var(--text)', fontWeight: 600 }}>Runtime:</span> Node</div>
+                  <div><span style={{ color: 'var(--text)', fontWeight: 600 }}>Build Command:</span> <span style={{ fontFamily: 'var(--mono)' }}>npm install</span></div>
+                  <div><span style={{ color: 'var(--text)', fontWeight: 600 }}>Start Command:</span> <span style={{ fontFamily: 'var(--mono)' }}>node ./src/server.js</span></div>
+                  <div><span style={{ color: 'var(--text)', fontWeight: 600 }}>Instance Type:</span> Free</div>
+                </div>
+              )}
+              {step.n === '5' && (
                 <div style={{ marginTop: 8 }}>
                   {envVars.map(ev => (
                     <CopyField key={ev.key} label={ev.key} value={ev.value} />
                   ))}
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.6 }}>
-                    For Supabase keys: go to supabase.com → your project → Settings → API
+                    🔑 CRON_SECRET — message Kartik to get this value
                   </div>
                 </div>
               )}
