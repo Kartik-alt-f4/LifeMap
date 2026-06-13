@@ -40,14 +40,14 @@ async function validateGeminiKey(key, renderUrl) {
   return true
 }
 
-async function setupSupabase(supabaseUrl, serviceKey) {
+async function setupSupabase(supabaseUrl, pat) {
   // Routes through your server to avoid CORS
   const base = 'https://lifemap-b0ms.onrender.com'
   const res  = await fetch(`${base}/setup-supabase`, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ supabaseUrl, serviceKey }),
-    signal:  AbortSignal.timeout(60000), // schema runs can take ~30s
+    body:    JSON.stringify({ supabaseUrl, pat }),
+    signal:  AbortSignal.timeout(60000),
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
