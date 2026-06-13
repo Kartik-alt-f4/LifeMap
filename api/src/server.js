@@ -3,14 +3,14 @@ import express       from 'express'
 import path          from 'path'
 import { fileURLToPath } from 'url'
 
-import { registerUser }             from '../../scripts/register-user.js'
+import { registerUser }                    from '../../scripts/register-user.js'
 import { setupSupabase, triggerEmbedSeed } from '../../scripts/setup-supabase.js'
 
 import { loadConfig, getConfig, getServer, writeConfigSection } from './configLoader.js'
-import { initGemini, runAgent } from './agentPipeline.js'
+import { initGemini, runAgent }    from './agentPipeline.js'
 import { initProjection, projectTask } from './projectionEngine.js'
-import { initDiscordBot } from './discordBot.js'
-import { executeActions } from './actionExecutor.js'
+import { initDiscordBot }          from './discordBot.js'
+import { executeActions }          from './actionExecutor.js'
 import { getHistory, saveExchange, formatForGemini } from './sessionManager.js'
 import { runMorning, runEod, runRemind, runCleanup, checkStreakWarning } from './cronJobs.js'
 import {
@@ -34,6 +34,16 @@ const app  = express()
 const PORT = getServer().server.port
 
 app.use(express.json())
+
+// ── CORS — allows setup wizard on any domain to reach this server ─────────────
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-cron-secret')
+  if (req.method === 'OPTIONS') return res.sendStatus(204)
+  next()
+})
+
 app.use(express.static(path.join(__dirname, '../../web/dist')))
 
 // ── Auth middleware for cron routes ───────────────────────────────────────────
@@ -87,7 +97,6 @@ app.get('/tasks', async (req, res) => {
 app.post('/tasks', async (req, res) => {
   try {
     const task = await createTask(req.body)
-    // Generate description async — non-blocking
     if (!task.description) {
       generateDescription(task.id, task.title, task.task_type, req.body.description_context ?? null)
         .catch(e => console.error('[desc]', e.message))
@@ -111,7 +120,6 @@ app.post('/tasks/:id/complete', async (req, res) => {
     const tasks  = await getTasksForDate(today)
     const task   = tasks.find(t => t.id === taskId)
 
-    // Also check historical dates — task might not be "today" if scheduled differently
     const resolvedTask = task ?? (await (async () => {
       const { supabase } = await import('./supabaseClient.js')
       const { data } = await supabase.from('task').select('*').eq('id', taskId).single()
@@ -122,7 +130,6 @@ app.post('/tasks/:id/complete', async (req, res) => {
     if (resolvedTask.status === 'completed') return res.status(400).json({ error: 'Task already completed' })
 
     const ps   = await getPlayerState()
-    // Normalise playerState shape for calculateCompletion
     const playerForCalc = {
       level:      ps.level      ?? 1,
       current_xp: ps.current_xp ?? 0,
@@ -189,77 +196,24 @@ app.post('/chat', async (req, res) => {
     const history     = formatForGemini(messages)
 
     const agentResult = await runAgent(message, history, playerState, today, todayTasks)
-    const { actions, needsClarification, clarificationQuestion } = agentResult
-    let { reply, intent } = agentResult
-
-    // Server-side duplicate guard — filter out create_task where title already exists today
-    const dedupedActions = actions.filter(action => {
-      if (action.type !== 'create_task') return true
-      const titleLower = (action.title ?? '').toLowerCase()
-      const exists = todayTasks.some(t =>
-        t.title.toLowerCase() === titleLower ||
-        t.title.toLowerCase().includes(titleLower) ||
-        titleLower.includes(t.title.toLowerCase())
-      )
-      if (exists) {
-        console.log(`[dedup] blocked duplicate: "${action.title}"`)
-        return false
-      }
-      return true
-    })
-
-    // Resolve edit_task with _title_hint — find task_id by title match
-    const resolvedActions = dedupedActions.map(action => {
-      if (action.type === 'edit_task' && !action.task_id && action._title_hint) {
-        const hint = action._title_hint.toLowerCase()
-        const match = todayTasks.find(t =>
-          t.title.toLowerCase().includes(hint) || hint.includes(t.title.toLowerCase())
-        )
-        if (match) return { ...action, task_id: match.id }
-      }
-      return action
-    })
 
     let actionResults = []
-    let actionErrors  = []
-    if (resolvedActions.length && !needsClarification) {
-      actionResults = await executeActions(resolvedActions, playerState, message)
-      actionErrors  = actionResults.filter(r => r.error)
+    if (agentResult.actions?.length) {
+      actionResults = await executeActions(agentResult.actions)
     }
 
-    // Refresh task list after any mutating action
-    const mutating = ['add_task','edit_task','complete_task','skip_task','cancel_task']
-    const freshTasks = mutating.includes(intent) && resolvedActions.length
-      ? await getTasksForDate(today)
-      : todayTasks
+    const updatedPlayer = await getPlayerState()
+    const updatedTasks  = await getTasksForDate(today)
 
-    // If actions failed, override reply to explain
-    if (actionErrors.length) {
-      const reasons = actionErrors.map(r => r.error).join(', ')
-      reply = `Action failed: ${reasons}`
+    let finalReply = agentResult.reply
+    if (actionResults.length > 0) {
+      const successActions = actionResults.filter(r => r.success)
+      if (successActions.length > 0 && !finalReply) {
+        finalReply = successActions.map(r => r.message).join('\n')
+      }
     }
 
-    // Build task list reply server-side for any query
-    const isQuery = intent === 'query' || /^(list|show|what).*(task|pending|today)|pending tasks/i.test(message)
-    if (isQuery) {
-      const TYPE_ICON = { anchor:'⚓', mandatory:'⚔', project:'📋', bonus:'⭐', habit:'🔄', routine:'🌿' }
-      const fmt = tasks => tasks.map(t =>
-        `  ${TYPE_ICON[t.task_type] ?? '◈'} ${t.title} (${t.priority}${t.time_block ? ', '+t.time_block : ''})`
-      ).join('\n')
-
-      const pending = freshTasks.filter(t => t.status === 'pending')
-      const done    = freshTasks.filter(t => t.status === 'completed')
-      const skipped = freshTasks.filter(t => t.status === 'skipped')
-
-      const parts = []
-      if (pending.length) parts.push(`Pending (${pending.length}):\n${fmt(pending)}`)
-      if (done.length)    parts.push(`Done (${done.length}):\n${fmt(done)}`)
-      if (skipped.length) parts.push(`Skipped (${skipped.length}):\n${fmt(skipped)}`)
-      reply = parts.length ? parts.join('\n\n') : 'No tasks today.'
-    }
-
-    const finalReply = needsClarification ? clarificationQuestion : reply
-    await saveExchange(sessionId, message, finalReply)
+    await saveExchange(sessionId, message, finalReply ?? '', agentResult.actions ?? [])
 
     res.json({ reply: finalReply, actions: actionResults })
   } catch (e) {
@@ -271,7 +225,7 @@ app.post('/chat', async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // SKILLS / STATS / SHOP / GRAPHS
 // ─────────────────────────────────────────────────────────────────────────────
-app.get('/skills',    async (_, res) => { try { res.json(await getSkills()) }           catch (e) { res.status(500).json({ error: e.message }) } })
+app.get('/skills', async (_, res) => { try { res.json(await getSkills()) }          catch (e) { res.status(500).json({ error: e.message }) } })
 
 app.patch('/skills/:id', async (req, res) => {
   try {
@@ -287,7 +241,8 @@ app.patch('/skills/:id', async (req, res) => {
     res.json(data)
   } catch (e) { res.status(400).json({ error: e.message }) }
 })
-app.get('/stats',     async (_, res) => { try { res.json(await getStats()) }            catch (e) { res.status(500).json({ error: e.message }) } })
+
+app.get('/stats', async (_, res) => { try { res.json(await getStats()) }            catch (e) { res.status(500).json({ error: e.message }) } })
 
 app.patch('/stats/:id', async (req, res) => {
   try {
@@ -301,9 +256,11 @@ app.patch('/stats/:id', async (req, res) => {
     res.json(data)
   } catch (e) { res.status(400).json({ error: e.message }) }
 })
-app.get('/shop',      async (_, res) => { try { res.json(await getShopWithCounts()) }   catch (e) { res.status(500).json({ error: e.message }) } })
-app.get('/snapshots', async (_, res) => { try { res.json(await getSnapshots()) }        catch (e) { res.status(500).json({ error: e.message }) } })
-app.get('/calendar',  async (req, res) => {
+
+app.get('/shop',      async (_, res) => { try { res.json(await getShopWithCounts()) } catch (e) { res.status(500).json({ error: e.message }) } })
+app.get('/snapshots', async (_, res) => { try { res.json(await getSnapshots()) }      catch (e) { res.status(500).json({ error: e.message }) } })
+
+app.get('/calendar', async (req, res) => {
   try {
     const month = req.query.month ?? new Date().toISOString().slice(0, 7)
     res.json(await getCalendar(month))
@@ -345,6 +302,25 @@ app.post('/leisure/log', async (req, res) => {
 
 app.patch('/stats/re-embed', async (req, res) => res.status(405).json({ error: 'use POST' }))
 
+app.post('/stats/re-embed', async (req, res) => {
+  try {
+    const { GoogleGenerativeAI } = await import('@google/generative-ai')
+    const { supabase }           = await import('./supabaseClient.js')
+    const embeddingModel         = getServer().model?.embedding_model ?? 'text-embedding-004'
+    const model = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY)
+      .getGenerativeModel({ model: embeddingModel })
+
+    const { data: stats, error } = await supabase.from('stat').select('id, name, description')
+    if (error) throw error
+
+    for (const stat of stats) {
+      const result = await model.embedContent(`${stat.name}. ${stat.description}`)
+      await supabase.from('stat').update({ embedding_vector: result.embedding.values }).eq('id', stat.id)
+    }
+    res.json({ ok: true, count: stats.length })
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
 app.post('/shop/:id/buy', async (req, res) => {
   try { res.json(await buyItem(parseInt(req.params.id))) }
   catch (e) { res.status(400).json({ error: e.message }) }
@@ -363,29 +339,14 @@ app.post('/notifications/register', async (req, res) => {
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
-// USER REGISTRATION — called by setup wizard when a friend finishes onboarding
+// SETUP — wizard endpoints (no auth required — called during onboarding)
 // ─────────────────────────────────────────────────────────────────────────────
-app.post('/register', async (req, res) => {
-  try {
-    const { renderUrl, name, googleUid } = req.body
-    if (!renderUrl) return res.status(400).json({ error: 'renderUrl required' })
- 
-    const result = await registerUser(renderUrl, name ?? 'friend')
-    res.json(result)
-  } catch (e) {
-    console.error('Register error:', e.message)
-    res.status(500).json({ error: e.message })
-  }
-})
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GEMINI KEY VALIDATION — called by setup wizard (avoids CORS on client side)
-// ─────────────────────────────────────────────────────────────────────────────
+// Gemini key validation
 app.post('/validate-gemini', async (req, res) => {
   try {
     const { key } = req.body
     if (!key) return res.status(400).json({ error: 'key required' })
- 
     const r = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${key}`,
       {
@@ -404,20 +365,86 @@ app.post('/validate-gemini', async (req, res) => {
   }
 })
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SUPABASE SETUP — called by setup wizard to auto-run schema + seed
-// Add to imports at top: import { setupSupabase } from '../../scripts/setup-supabase.js'
-// ─────────────────────────────────────────────────────────────────────────────
+// Supabase schema + seed setup
 app.post('/setup-supabase', async (req, res) => {
   try {
-    const { supabaseUrl, serviceKey } = req.body
+    const { supabaseUrl, pat } = req.body
     if (!supabaseUrl) return res.status(400).json({ error: 'supabaseUrl required' })
-    if (!serviceKey)  return res.status(400).json({ error: 'serviceKey required' })
- 
-    const result = await setupSupabase(supabaseUrl, serviceKey)
+    if (!pat)         return res.status(400).json({ error: 'pat required' })
+    const result = await setupSupabase(supabaseUrl, pat)
     res.json(result)
   } catch (e) {
     console.error('Supabase setup error:', e.message)
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// Stat embedding seed — called on friend's own server after Render is live
+app.post('/setup/embed', async (req, res) => {
+  try {
+    const { createClient }       = await import('@supabase/supabase-js')
+    const { GoogleGenerativeAI } = await import('@google/generative-ai')
+    const embeddingModel         = getServer().model?.embedding_model ?? 'text-embedding-004'
+
+    const supabase = createClient(
+      process.env.SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_KEY
+    )
+    const model = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY)
+      .getGenerativeModel({ model: embeddingModel })
+
+    const { data: stats, error } = await supabase
+      .from('stat').select('id, name, description, embedding_vector')
+    if (error) throw new Error(error.message)
+
+    const needsEmbed = stats.filter(s => !s.embedding_vector)
+    if (!needsEmbed.length) return res.json({ ok: true, embedded: 0, note: 'already done' })
+
+    let embedded = 0
+    for (const stat of needsEmbed) {
+      const result = await model.embedContent(`${stat.name}. ${stat.description}`)
+      const { error: updateErr } = await supabase
+        .from('stat').update({ embedding_vector: result.embedding.values }).eq('id', stat.id)
+      if (updateErr) throw new Error(`Failed to embed ${stat.name}: ${updateErr.message}`)
+      embedded++
+    }
+    res.json({ ok: true, embedded })
+  } catch (e) {
+    console.error('Embed seed error:', e.message)
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// UID lookup — returning user skips wizard
+app.get('/lookup', async (req, res) => {
+  try {
+    const { uid } = req.query
+    if (!uid) return res.status(400).json({ error: 'uid required' })
+
+    const { readFileSync } = await import('fs')
+    const { join }         = await import('path')
+    const file  = join(process.cwd(), '../../config/users.json')
+    const users = JSON.parse(readFileSync(file, 'utf8'))
+    const found = users.find(u => u.googleUid === uid)
+
+    if (found) return res.json({ found: true, renderUrl: found.url, name: found.name })
+    res.json({ found: false })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// User registration + trigger embed on friend's server
+app.post('/register', async (req, res) => {
+  try {
+    const { renderUrl, name, googleUid } = req.body
+    if (!renderUrl) return res.status(400).json({ error: 'renderUrl required' })
+    const result = await registerUser(renderUrl, name ?? 'friend', googleUid)
+    // Trigger embed on friend's server non-blocking
+    triggerEmbedSeed(renderUrl).catch(e => console.warn('[register] embed trigger failed:', e.message))
+    res.json(result)
+  } catch (e) {
+    console.error('Register error:', e.message)
     res.status(500).json({ error: e.message })
   }
 })

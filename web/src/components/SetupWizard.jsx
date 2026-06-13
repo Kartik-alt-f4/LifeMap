@@ -56,6 +56,19 @@ async function setupSupabase(supabaseUrl, serviceKey) {
   return res.json()
 }
 
+async function lookupUser(googleUid) {
+  // Check your server first — if UID already registered, return their config
+  const BASE = 'https://lifemap-b0ms.onrender.com'
+  try {
+    const res = await fetch(`${BASE}/lookup?uid=${encodeURIComponent(googleUid)}`, {
+      signal: AbortSignal.timeout(8000),
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    return data.found ? data : null
+  } catch (_) { return null }
+}
+
 async function registerWithServer(renderUrl, name, googleUid) {
   const url = renderUrl.replace(/\/$/, '')
   const res = await fetch(`${url}/register`, {
@@ -141,6 +154,21 @@ function StepSignIn({ onDone }) {
       const provider  = new GoogleAuthProvider()
       const result    = await signInWithPopup(auth, provider)
       const user      = result.user
+
+      // Check if already registered — skip wizard if so
+      setError('') // clear
+      const existing = await lookupUser(user.uid)
+      if (existing) {
+        // Restore config and jump straight to app
+        saveStoredConfig({
+          renderUrl: existing.renderUrl,
+          googleUid: user.uid,
+          name:      existing.name ?? user.displayName,
+        })
+        onDone({ googleUid: user.uid, name: user.displayName, returning: true, renderUrl: existing.renderUrl })
+        return
+      }
+
       onDone({ googleUid: user.uid, name: user.displayName, email: user.email })
     } catch (e) {
       setError(e.message ?? 'Sign-in failed')
@@ -352,6 +380,29 @@ function StepSupabase({ onDone, onBack }) {
   )
 }
 
+// ── .env file generator ──────────────────────────────────────────────────────
+function downloadEnvFile(data, cronSecret) {
+  const lines = [
+    '# Life Map — Render environment variables',
+    '# Import this file in Render: Environment → Add from .env',
+    '',
+    `SUPABASE_URL=${data.supabaseUrl ?? ''}`,
+    `SUPABASE_ANON_KEY=${data.anonKey ?? ''}`,
+    `SUPABASE_SERVICE_KEY=${data.serviceKey ?? ''}`,
+    `GOOGLE_API_KEY=${data.geminiKey ?? ''}`,
+    `CRON_SECRET=${cronSecret ?? ''}`,
+    'NODE_ENV=production',
+  ].join('\n')
+
+  const blob = new Blob([lines], { type: 'text/plain' })
+  const url  = URL.createObjectURL(blob)
+  const a    = document.createElement('a')
+  a.href     = url
+  a.download = 'lifemap.env'
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 // ── Step 4: Render Setup ──────────────────────────────────────────────────────
 function StepRender({ data, onDone, onBack }) {
   const [url,     setUrl]     = useState('')
@@ -424,11 +475,32 @@ function StepRender({ data, onDone, onBack }) {
               )}
               {step.n === '5' && (
                 <div style={{ marginTop: 8 }}>
-                  {envVars.map(ev => (
-                    <CopyField key={ev.key} label={ev.key} value={ev.value} />
-                  ))}
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.6 }}>
-                    🔑 CRON_SECRET — message Kartik to get this value
+                  <div style={{
+                    background: 'var(--surface2)', border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-sm)', padding: '10px 12px',
+                    fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.8,
+                    marginBottom: 10,
+                  }}>
+                    In Render: <strong style={{ color: 'var(--text)' }}>Environment → Add from .env file</strong><br/>
+                    Download your pre-filled .env file below, then import it.<br/>
+                    <span style={{ color: 'var(--warning)' }}>⚠ Fill in CRON_SECRET manually — message Kartik for this value.</span>
+                  </div>
+                  <button
+                    onClick={() => downloadEnvFile(data, '')}
+                    style={{
+                      width: '100%', padding: '9px',
+                      background: 'var(--accent-dim)',
+                      border: '1px solid var(--accent)',
+                      borderRadius: 'var(--radius-sm)',
+                      color: 'var(--accent)',
+                      fontSize: 13, fontWeight: 700,
+                      cursor: 'pointer', marginBottom: 8,
+                    }}
+                  >
+                    ↓ Download lifemap.env
+                  </button>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                    All values are pre-filled except CRON_SECRET. Add that manually in Render after importing.
                   </div>
                 </div>
               )}
@@ -513,16 +585,23 @@ export default function SetupWizard({ onComplete }) {
   const [data, setData] = useState({})
 
   const advance = (newData) => {
-    setData(d => ({ ...d, ...newData }))
+    const merged = { ...data, ...newData }
+    setData(merged)
+    // Returning user — config already saved, skip to done
+    if (merged.returning) {
+      finish(merged)
+      return
+    }
     setStep(s => s + 1)
   }
 
-  const finish = () => {
+  const finish = (override) => {
+    const d = override ?? data
     const config = {
-      renderUrl:  data.renderUrl,
-      geminiKey:  data.geminiKey,
-      googleUid:  data.googleUid,
-      name:       data.name,
+      renderUrl: d.renderUrl,
+      geminiKey: d.geminiKey,
+      googleUid: d.googleUid,
+      name:      d.name,
     }
     saveStoredConfig(config)
     onComplete(config)

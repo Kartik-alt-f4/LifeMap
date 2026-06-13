@@ -22,7 +22,7 @@ async function ghFetch(path, options = {}) {
   return data
 }
 
-export async function registerUser(renderUrl, name) {
+export async function registerUser(renderUrl, name, googleUid) {
   const repo = process.env.GITHUB_REPO
   if (!repo)                  throw new Error('GITHUB_REPO env var not set')
   if (!process.env.GITHUB_TOKEN) throw new Error('GITHUB_TOKEN env var not set')
@@ -36,7 +36,7 @@ export async function registerUser(renderUrl, name) {
   if (exists) return { ok: true, already: true, users: current }
 
   // 3. Append new user
-  const updated = [...current, { url: renderUrl, name: name || 'friend' }]
+  const updated = [...current, { url: renderUrl, name: name || 'friend', googleUid: googleUid || null }]
   const content  = Buffer.from(JSON.stringify(updated, null, 2) + '\n').toString('base64')
 
   // 4. Commit back
