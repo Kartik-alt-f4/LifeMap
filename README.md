@@ -272,3 +272,42 @@ lifemap/
 7. Open Settings and enrich stat descriptions for better tracking
 
 All game mechanics (XP values, energy, ranks, skill thresholds) are editable in `config/game.json` or via the Settings page. No code changes needed for tuning.
+
+
+---
+
+## Changelog — recent additions
+
+### Leisure tracking
+- `shop_item` now has a `tracking_unit` field: `none`, `count`, `minutes`, `boolean`
+- New `leisure_log` table records usage — written automatically on purchase, or manually via `+` button (mobile/web) or chat (`"smoked 3"`, `"gamed 90 minutes"`)
+- EOD cron writes a `leisure_summary` JSON blob into `daily_snapshot` for future graph plotting
+- Agent understands `log_leisure` action — infers item from context, quantity from message
+
+### Day Off+
+- New shop item type: `day_off_plus` — sets `mandatory_met`, `day_off_granted`, and `free_leisure_today`
+- When `free_leisure_today` is true, all leisure item purchases skip gold deduction
+- Web navbar and mobile Today screen show a green `DAY OFF` / `DAY OFF+` badge
+- `free_leisure_today` resets at EOD with `roll_daily_state()`
+
+### Graphs page (web)
+- New Graphs modal in the web navbar — shows XP, streak, gold, energy, tasks completed/skipped over time
+- Uses `/snapshots` endpoint — data populated by EOD cron, nothing to configure
+- Range selector: 7d, 14d, 30d, 90d
+
+### Mobile updates
+- Date navigation on Today screen — arrows to browse past/future days
+- Profile screen has a ⚙ Settings button (top right)
+- Shop screen shows today's leisure usage count per item
+- Task drawer shows description and full edit fields including schedule and recurring
+
+### Reset script
+- Now clears `leisure_log` table
+- Resets `free_leisure_today: false` in daily state
+- Run: `cd api && node ../scripts/reset.js [--hard]`
+
+### Agent improvements
+- `create_shop_item` action — *"add a shop item called Netflix for 10 gold"*
+- `log_leisure` action — *"smoked 3"*, *"watched 2 episodes"*, *"gamed for 90 minutes"*
+- Discord bot now passes original message to `generateDescription` (context-aware descriptions)
+- `PATCH /skills/:id` — edit skill name and description from Profile screen

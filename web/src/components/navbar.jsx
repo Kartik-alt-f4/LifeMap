@@ -117,6 +117,7 @@ export default function Navbar({ playerState: ps, activeModal, onOpenModal, onRe
           { id:'skills',   label:'Skills'   },
           { id:'stats',    label:'Stats'    },
           { id:'shop',     label:'Shop'     },
+          { id:'graphs',   label:'Graphs'   },
           { id:'settings', label:'Settings' },
         ].map(p => (
           <button

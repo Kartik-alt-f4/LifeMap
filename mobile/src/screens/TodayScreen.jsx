@@ -72,17 +72,36 @@ export default function TodayScreen() {
   const [loading,    setLoading]    = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [selected, setSelected] = useState(null)
+  const [date,       setDate]       = useState(todayStr())
+
+  const isToday = date === todayStr()
+
+  function shiftDate(days) {
+    const d = new Date(date + 'T00:00:00')
+    d.setDate(d.getDate() + days)
+    setDate(d.toISOString().split('T')[0])
+  }
+
+  function formatDateLabel(d) {
+    const dt   = new Date(d + 'T00:00:00')
+    const today = new Date(); today.setHours(0,0,0,0)
+    const diff  = Math.round((dt - today) / 86400000)
+    if (diff === 0)  return 'Today'
+    if (diff === -1) return 'Yesterday'
+    if (diff === 1)  return 'Tomorrow'
+    return dt.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' })
+  }
 
   const load = useCallback(async () => {
     try {
-      const [state, taskData] = await Promise.all([getState(), getTasks()])
+      const [state, taskData] = await Promise.all([getState(), getTasks(isToday ? undefined : date)])
       setPlayer(state)
       setTasks(taskData)
     } catch (e) { console.error(e) }
     finally { setLoading(false); setRefreshing(false) }
   }, [])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => { load() }, [load, date])
 
   const handleComplete = async (id) => {
     try { await completeTask(id); await load() } catch (e) { console.error(e) }
@@ -130,6 +149,22 @@ export default function TodayScreen() {
           </View>
         </View>
       )}
+
+      {/* Date navigation */}
+      <View style={styles.dateNav}>
+        <TouchableOpacity style={styles.dateNavBtn} onPress={() => shiftDate(-1)}>
+          <Text style={styles.dateNavArrow}>‹</Text>
+        </TouchableOpacity>
+        <Text style={[styles.dateLabel, !isToday && styles.dateLabelPast]}>{formatDateLabel(date)}</Text>
+        <TouchableOpacity style={styles.dateNavBtn} onPress={() => shiftDate(1)}>
+          <Text style={styles.dateNavArrow}>›</Text>
+        </TouchableOpacity>
+        {!isToday && (
+          <TouchableOpacity style={styles.todayBtn} onPress={() => setDate(todayStr())}>
+            <Text style={styles.todayBtnText}>Today</Text>
+          </TouchableOpacity>
+        )}
+      </View>
 
       {/* Task list */}
       <FlatList
@@ -184,6 +219,13 @@ const styles = StyleSheet.create({
   tag:          { fontSize: 10, color: colors.textMuted },
   chevron:      { fontSize: 18, color: colors.textDim },
   empty:        { textAlign: 'center', color: colors.textMuted, marginTop: 60, fontSize: 13 },
+  dateNav:      { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 8 },
+  dateNavBtn:   { width: 32, height: 32, borderRadius: 8, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  dateNavArrow: { fontSize: 18, color: colors.textMuted },
+  dateLabel:    { flex: 1, textAlign: 'center', fontSize: 13, fontWeight: '600', color: colors.text },
+  dateLabelPast:{ color: colors.textMuted },
+  todayBtn:     { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, backgroundColor: colors.accentDim, borderWidth: 1, borderColor: colors.accent },
+  todayBtnText: { fontSize: 11, fontWeight: '700', color: colors.accent },
   headerDayOff: { borderBottomColor: 'rgba(62,207,142,0.35)', backgroundColor: 'rgba(62,207,142,0.04)' },
   dayOffBadge:  { fontSize: 9, fontWeight: '700', color: '#3ecf8e', backgroundColor: 'rgba(62,207,142,0.12)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 3, borderWidth: 1, borderColor: 'rgba(62,207,142,0.3)', letterSpacing: 0.5 },
 

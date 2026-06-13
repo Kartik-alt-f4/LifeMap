@@ -105,7 +105,7 @@ REPLY TEMPLATES (use exact format):
 OUTPUT: valid JSON only. No markdown. No text outside the JSON.
 
 {
-  "intent": "add_task|edit_task|complete_task|skip_task|cancel_task|query|chat",
+  "intent": "add_task|edit_task|complete_task|skip_task|cancel_task|create_shop_item|log_leisure|query|chat",
   "reply": "one line shown to user",
   "needs_clarification": false,
   "clarification_question": null,

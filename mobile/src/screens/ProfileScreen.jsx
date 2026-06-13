@@ -153,8 +153,9 @@ export default function ProfileScreen() {
   const [refreshing,setRefreshing]= useState(false)
 
   // Edit modal state
-  const [editTarget, setEditTarget] = useState(null)  // { type: 'stat'|'skill', item }
-  const [saving,     setSaving]     = useState(false)
+  const [editTarget,   setEditTarget]   = useState(null)
+  const [saving,       setSaving]       = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -255,6 +256,14 @@ export default function ProfileScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+      {/* Settings button */}
+      <TouchableOpacity
+        style={[sp.settingsBtn, { top: insets.top + 8 }]}
+        onPress={() => setShowSettings(true)}
+      >
+        <Text style={sp.settingsIcon}>⚙</Text>
+      </TouchableOpacity>
+
       <ScrollView
         contentContainerStyle={{ padding: 14, gap: 14, paddingBottom: insets.bottom + 80 }}
         refreshControl={
@@ -312,6 +321,47 @@ export default function ProfileScreen() {
           ))
         }
       </ScrollView>
+
+      {/* Settings modal */}
+      <Modal visible={showSettings} transparent animationType="slide" onRequestClose={() => setShowSettings(false)}>
+        <View style={sp.overlay}>
+          <View style={sp.sheet}>
+            <View style={sp.handle} />
+            <View style={sp.sheetHeader}>
+              <Text style={sp.sheetTitle}>Settings</Text>
+              <TouchableOpacity onPress={() => setShowSettings(false)}>
+                <Text style={sp.closeX}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView contentContainerStyle={{ gap: 16 }}>
+              <View>
+                <Text style={sp.sectionTitle}>STAT MATCHING</Text>
+                <Text style={sp.sectionHint}>
+                  Edit stat descriptions in the Profile page by tapping any stat card.
+                  Better descriptions = better task→stat matching.
+                </Text>
+              </View>
+              <View>
+                <Text style={sp.sectionTitle}>RE-EMBED STATS</Text>
+                <Text style={sp.sectionHint}>After editing stat descriptions, tap Save & re-embed on each card.</Text>
+              </View>
+              <View>
+                <Text style={sp.sectionTitle}>RESET</Text>
+                <Text style={sp.sectionHint}>
+                  To reset game data, run from your terminal:{'\n'}
+                  <Text style={{ fontFamily: 'monospace', color: '#7b6ef6' }}>cd api && node ../scripts/reset.js</Text>
+                </Text>
+              </View>
+              <View>
+                <Text style={sp.sectionTitle}>API ENDPOINT</Text>
+                <Text style={[sp.sectionHint, { fontFamily: 'monospace', color: '#7b6ef6', fontSize: 11 }]}>
+                  https://lifemap-b0ms.onrender.com
+                </Text>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       {/* Edit modal */}
       <EditModal
@@ -391,4 +441,18 @@ const styles = StyleSheet.create({
   modalSaveText:    { fontSize: 13, color: '#fff', fontWeight: '700' },
 
   empty:            { textAlign: 'center', color: colors.textMuted, marginTop: 20, fontSize: 12 },
+})
+
+// Settings panel styles
+const sp = StyleSheet.create({
+  settingsBtn:  { position: 'absolute', right: 14, zIndex: 10, width: 34, height: 34, borderRadius: 17, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  settingsIcon: { fontSize: 16, color: colors.textMuted },
+  overlay:      { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.65)' },
+  sheet:        { backgroundColor: colors.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingTop: 12, maxHeight: '80%', borderTopWidth: 1, borderColor: colors.borderHi },
+  handle:       { width: 36, height: 4, backgroundColor: colors.border, borderRadius: 2, alignSelf: 'center', marginBottom: 14 },
+  sheetHeader:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
+  sheetTitle:   { fontSize: 14, fontWeight: '700', color: colors.text },
+  closeX:       { fontSize: 16, color: colors.textMuted, padding: 4 },
+  sectionTitle: { fontSize: 9, fontWeight: '700', color: colors.textMuted, letterSpacing: 1.2, marginBottom: 6 },
+  sectionHint:  { fontSize: 12, color: colors.text, lineHeight: 18 },
 })

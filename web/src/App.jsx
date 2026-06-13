@@ -6,6 +6,7 @@ import Skills        from './pages/Skills.jsx'
 import Stats         from './pages/Stats.jsx'
 import Shop          from './pages/Shop.jsx'
 import Settings      from './pages/Settings.jsx'
+import Graphs        from './pages/Graphs.jsx'
 
 export default function App() {
   const [modal,       setModal]       = useState(null)   // 'skills'|'stats'|'shop'|'settings'|null
@@ -91,6 +92,18 @@ export default function App() {
             <div className="modal-body">
               <Shop playerState={playerState} onRefresh={refreshState} />
             </div>
+          </div>
+        </div>
+      )}
+
+      {modal === 'graphs' && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setModal(null)}>
+          <div className="modal" style={{ width:'min(860px, calc(100vw - 32px))' }}>
+            <div className="modal-header">
+              <span className="modal-title">Graphs</span>
+              <button className="modal-close" onClick={() => setModal(null)}>✕</button>
+            </div>
+            <div className="modal-body"><Graphs /></div>
           </div>
         </div>
       )}

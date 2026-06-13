@@ -160,17 +160,31 @@ export async function runEod() {
     .select('id', { count: 'exact', head: true })
     .eq('scheduled_for', today).eq('status', 'skipped')
 
+  // Summarise today's leisure usage for snapshot
+  const { data: leisureLogs } = await supabase
+    .from('leisure_log')
+    .select('quantity, unit, shop_item(name, tracking_unit)')
+    .gte('logged_at', `${today}T00:00:00`)
+
+  const leisureSummary = {}
+  for (const log of leisureLogs || []) {
+    const name = log.shop_item?.name ?? 'Unknown'
+    if (!leisureSummary[name]) leisureSummary[name] = { quantity: 0, unit: log.unit }
+    leisureSummary[name].quantity += log.quantity
+  }
+
   await supabase.from('daily_snapshot').insert({
-    date:           today,
-    level:          player.level,
-    current_xp:     player.current_xp,
-    total_gold:     player.total_gold,
-    available_gold: player.available_gold,
-    day_streak:     newStreak,
-    energy:         player.energy.current,
-    mandatory_met:  state.mandatory_met,
+    date:            today,
+    level:           player.level,
+    current_xp:      player.current_xp,
+    total_gold:      player.total_gold,
+    available_gold:  player.available_gold,
+    day_streak:      newStreak,
+    energy:          player.energy.current,
+    mandatory_met:   state.mandatory_met,
     tasks_completed: completed ?? 0,
-    tasks_skipped:   skipped   ?? 0
+    tasks_skipped:   skipped   ?? 0,
+    leisure_summary: Object.keys(leisureSummary).length ? leisureSummary : null
   })
 
   // 5. Roll daily state

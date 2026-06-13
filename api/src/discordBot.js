@@ -65,7 +65,7 @@ export function initDiscordBot() {
 
       // Execute actions server-side
       if (actions.length && !needsClarification) {
-        await executeActions(actions, playerState)
+        await executeActions(actions, playerState, text)
       }
 
       const finalReply = needsClarification ? clarificationQuestion : reply
