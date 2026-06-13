@@ -3,6 +3,8 @@ import express       from 'express'
 import path          from 'path'
 import { fileURLToPath } from 'url'
 
+import { registerUser } from '../../scripts/register-user.js'
+
 import { loadConfig, getConfig, getServer, writeConfigSection } from './configLoader.js'
 import { initGemini, runAgent } from './agentPipeline.js'
 import { initProjection, projectTask } from './projectionEngine.js'
@@ -357,6 +359,22 @@ app.post('/notifications/register', async (req, res) => {
     await savePushToken(token, platform)
     res.json({ ok: true })
   } catch (e) { res.status(400).json({ error: e.message }) }
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// USER REGISTRATION — called by setup wizard when a friend finishes onboarding
+// ─────────────────────────────────────────────────────────────────────────────
+app.post('/register', async (req, res) => {
+  try {
+    const { renderUrl, name, googleUid } = req.body
+    if (!renderUrl) return res.status(400).json({ error: 'renderUrl required' })
+ 
+    const result = await registerUser(renderUrl, name ?? 'friend')
+    res.json(result)
+  } catch (e) {
+    console.error('Register error:', e.message)
+    res.status(500).json({ error: e.message })
+  }
 })
 
 // ─────────────────────────────────────────────────────────────────────────────

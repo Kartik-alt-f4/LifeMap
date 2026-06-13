@@ -1,52 +1,86 @@
-// web/src/api.js — all fetch calls to the backend
-// Single source of truth for API communication.
-// BASE_URL falls back to localhost for dev, uses relative path in prod.
+// src/api.js — all API calls to the Render backend
+// BASE_URL is read from localStorage config set during setup wizard.
+// Falls back to the hardcoded URL so your own instance always works.
 
-const BASE = import.meta.env.VITE_API_URL || ''
+const FALLBACK = 'https://lifemap-b0ms.onrender.com'
+
+function getBase() {
+  try {
+    const cfg = localStorage.getItem('lifemap_config')
+    if (cfg) {
+      const parsed = JSON.parse(cfg)
+      if (parsed.renderUrl) return parsed.renderUrl.replace(/\/$/, '')
+    }
+  } catch (_) {}
+  return FALLBACK
+}
 
 async function req(path, options = {}) {
-  const res = await fetch(`${BASE}${path}`, {
+  const BASE = getBase()
+  const res  = await fetch(`${BASE}${path}`, {
     headers: { 'Content-Type': 'application/json' },
     ...options,
   })
-  const data = await res.json()
+
+  const text = await res.text()
+
+  if (text.trim().startsWith('<')) {
+    console.error(`[api] HTML response for ${path}:`, text.slice(0, 200))
+    throw new Error(`Server error on ${path} — check Render logs`)
+  }
+
+  let data
+  try {
+    data = JSON.parse(text)
+  } catch (e) {
+    console.error(`[api] JSON parse failed for ${path}:`, text.slice(0, 200))
+    throw new Error(`Invalid JSON from ${path}`)
+  }
+
   if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
   return data
 }
 
-// ── State ─────────────────────────────────────────────────────────────────────
-export const getState     = ()      => req('/state')
+// Config helpers — used by setup wizard
+export function getStoredConfig() {
+  try {
+    const cfg = localStorage.getItem('lifemap_config')
+    return cfg ? JSON.parse(cfg) : null
+  } catch (_) { return null }
+}
+
+export function saveStoredConfig(config) {
+  localStorage.setItem('lifemap_config', JSON.stringify(config))
+}
+
+export function clearStoredConfig() {
+  localStorage.removeItem('lifemap_config')
+}
+
+// Health check — used by setup wizard to validate Render URL
+export async function checkHealth(renderUrl) {
+  const url = renderUrl.replace(/\/$/, '')
+  const res = await fetch(`${url}/health`, { signal: AbortSignal.timeout(10000) })
+  if (!res.ok) throw new Error(`Health check failed: ${res.status}`)
+  return res.json()
+}
+
 export const getConfig    = ()      => req('/config')
-
-// ── Tasks ─────────────────────────────────────────────────────────────────────
+export const getState     = ()      => req('/state')
 export const getTasks     = (date)  => req(`/tasks${date ? `?date=${date}` : ''}`)
-export const createTask   = (body)  => req('/tasks',          { method: 'POST', body: JSON.stringify(body) })
-export const editTask     = (id, b) => req(`/tasks/${id}`,    { method: 'PATCH', body: JSON.stringify(b) })
-export const completeTask = (id)    => req(`/tasks/${id}/complete`, { method: 'POST' })
-export const skipTask     = (id)    => req(`/tasks/${id}/skip`,     { method: 'POST' })
-export const cancelTask   = (id)    => req(`/tasks/${id}/cancel`,   { method: 'POST' })
-
-// ── Templates ─────────────────────────────────────────────────────────────────
-export const getTemplates      = ()    => req('/templates')
-export const createTemplate    = (b)   => req('/templates',      { method: 'POST',   body: JSON.stringify(b) })
-export const deleteTemplate    = (id)  => req(`/templates/${id}`, { method: 'DELETE' })
-
-// ── Chat ──────────────────────────────────────────────────────────────────────
-export const chat = (message, session_id = 'web') =>
-  req('/chat', { method: 'POST', body: JSON.stringify({ message, session_id }) })
-
-// ── RPG ───────────────────────────────────────────────────────────────────────
-export const getSkills    = ()       => req('/skills')
-export const getStats     = ()       => req('/stats')
-export const getSnapshots = ()       => req('/snapshots')
-export const getCalendar  = (month)  => req(`/calendar${month ? `?month=${month}` : ''}`)
-
-// ── Shop ──────────────────────────────────────────────────────────────────────
-export const getShop  = ()    => req('/shop')
-export const buyItem  = (id)  => req(`/shop/${id}/buy`, { method: 'POST' })
-
-// ── Config (settings page) ────────────────────────────────────────────────────
-export const saveConfig = (file, section, value) =>
-  req(`/config/${file}${section ? `/${section}` : ''}`, {
-    method: 'POST', body: JSON.stringify(value)
-  })
+export const completeTask = (id)    => req(`/tasks/${id}/complete`, { method: 'POST', body: JSON.stringify({}) })
+export const skipTask     = (id)    => req(`/tasks/${id}/skip`,     { method: 'POST', body: JSON.stringify({}) })
+export const cancelTask   = (id)    => req(`/tasks/${id}/cancel`,   { method: 'POST', body: JSON.stringify({}) })
+export const editTask     = (id, body) => req(`/tasks/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+export const chat         = (msg)   => req('/chat', { method: 'POST', body: JSON.stringify({ message: msg, session_id: 'web' }) })
+export const getStats     = ()      => req('/stats')
+export const getShop      = ()      => req('/shop')
+export const buyItem      = (id)    => req(`/shop/${id}/buy`, { method: 'POST', body: JSON.stringify({}) })
+export const getSkills      = ()         => req('/skills')
+export const createTask     = (body)     => req('/tasks',     { method: 'POST', body: JSON.stringify(body) })
+export const createTemplate = (body)     => req('/templates', { method: 'POST', body: JSON.stringify(body) })
+export const saveConfig   = (file, section, body) => req(`/config/${file}/${section}`, { method: 'POST', body: JSON.stringify(body) })
+export const getSnapshots = ()      => req('/snapshots')
+export const getCalendar  = (month) => req(`/calendar${month ? `?month=${month}` : ''}`)
+export const registerPush = (token, platform) =>
+  req('/notifications/register', { method: 'POST', body: JSON.stringify({ token, platform }) })
