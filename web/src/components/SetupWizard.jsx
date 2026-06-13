@@ -232,36 +232,38 @@ function StepGemini({ onDone, onBack }) {
 
 // ── Step 3: Supabase Setup ───────────────────────────────────────────────────
 function StepSupabase({ onDone, onBack }) {
-  const [url,        setUrl]        = useState('')
+  const [url,      setUrl]      = useState('')
+  const [pat,      setPat]      = useState('')
+  const [anonKey,  setAnonKey]  = useState('')
   const [serviceKey, setServiceKey] = useState('')
-  const [loading,    setLoading]    = useState(false)
-  const [phase,      setPhase]      = useState('input') // 'input' | 'running'
-  const [progress,   setProgress]   = useState('')
-  const [error,      setError]      = useState('')
+  const [loading,  setLoading]  = useState(false)
+  const [phase,    setPhase]    = useState('input')
+  const [progress, setProgress] = useState('')
+  const [error,    setError]    = useState('')
 
   const run = async () => {
     const cleanUrl = url.trim().replace(/\/$/, '')
-    if (!cleanUrl || !serviceKey.trim()) return
+    if (!cleanUrl || !pat.trim()) return
     setLoading(true); setError(''); setPhase('running')
 
     try {
       setProgress('Enabling pgvector extension…')
-      await new Promise(r => setTimeout(r, 800))
+      await new Promise(r => setTimeout(r, 600))
       setProgress('Running schema.sql…')
-      await new Promise(r => setTimeout(r, 800))
+      await new Promise(r => setTimeout(r, 600))
       setProgress('Running functions.sql…')
 
-      await setupSupabase(cleanUrl, serviceKey.trim())
+      await setupSupabase(cleanUrl, pat.trim())
 
       setProgress('Seeding default data…')
       await new Promise(r => setTimeout(r, 400))
       setProgress('Done!')
-      await new Promise(r => setTimeout(r, 600))
+      await new Promise(r => setTimeout(r, 500))
 
       onDone({
-        supabaseUrl:    cleanUrl,
-        supabaseAnonKey: '', // user will paste anon key in Render step
-        serviceKey:     serviceKey.trim(),
+        supabaseUrl: cleanUrl,
+        anonKey:     anonKey.trim(),
+        serviceKey:  serviceKey.trim(),
       })
     } catch (e) {
       setError(e.message)
@@ -291,48 +293,48 @@ function StepSupabase({ onDone, onBack }) {
       <div style={s.stepIcon}>🗄️</div>
       <h2 style={s.stepTitle}>Set up your database</h2>
       <p style={s.stepDesc}>
-        Create a free Supabase project, then paste your credentials here.
-        We'll set up the database automatically.
+        Create a free Supabase project. We'll set up the schema automatically.
       </p>
-
-      <a href="https://supabase.com" target="_blank" rel="noreferrer" style={s.linkBtn}>
-        Open Supabase →
-      </a>
 
       <div style={{
         background: 'var(--surface2)', border: '1px solid var(--border)',
         borderRadius: 'var(--radius-sm)', padding: '12px 14px',
-        fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.7,
-        marginTop: 16, marginBottom: 20,
+        fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.8,
+        marginBottom: 20,
       }}>
         <strong style={{ color: 'var(--text)' }}>Steps:</strong><br/>
-        1. Create account + new project on Supabase<br/>
-        2. Go to <span style={{ color: 'var(--accent)', fontFamily: 'var(--mono)' }}>Project Settings → API</span><br/>
-        3. Copy <strong style={{ color: 'var(--text)' }}>Project URL</strong> and <strong style={{ color: 'var(--text)' }}>service_role key</strong>
+        1. Create account + new project at <a href="https://supabase.com" target="_blank" rel="noreferrer" style={{ color: 'var(--accent)' }}>supabase.com</a><br/>
+        2. Go to <span style={{ color: 'var(--accent)', fontFamily: 'var(--mono)' }}>Account → Access Tokens</span> → generate a token<br/>
+        3. Go to <span style={{ color: 'var(--accent)', fontFamily: 'var(--mono)' }}>Project Settings → API</span> → copy Project URL, anon key, service_role key
       </div>
 
       <div style={{ marginBottom: 6 }}>
         <label style={s.fieldLabel}>Project URL</label>
-        <input
-          style={s.input}
-          type="url"
-          placeholder="https://xxxx.supabase.co"
-          value={url}
-          onChange={e => setUrl(e.target.value)}
-        />
+        <input style={s.input} type="url" placeholder="https://xxxx.supabase.co"
+          value={url} onChange={e => setUrl(e.target.value)} />
       </div>
 
       <div style={{ marginBottom: 6 }}>
-        <label style={s.fieldLabel}>Service Role Key (secret)</label>
-        <input
-          style={s.input}
-          type="password"
-          placeholder="eyJhbGciOiJIUzI1NiIs..."
-          value={serviceKey}
-          onChange={e => setServiceKey(e.target.value)}
-        />
+        <label style={s.fieldLabel}>Personal Access Token (Account → Access Tokens)</label>
+        <input style={s.input} type="password" placeholder="sbp_..."
+          value={pat} onChange={e => setPat(e.target.value)} />
         <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: -10, marginBottom: 16, lineHeight: 1.5 }}>
-          This is only used once to set up your schema. It's never stored.
+          Used once to run the database setup. Never stored.
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 6 }}>
+        <label style={s.fieldLabel}>Anon / Public Key</label>
+        <input style={s.input} type="password" placeholder="eyJhbGciOiJIUzI1NiIs..."
+          value={anonKey} onChange={e => setAnonKey(e.target.value)} />
+      </div>
+
+      <div style={{ marginBottom: 6 }}>
+        <label style={s.fieldLabel}>Service Role Key</label>
+        <input style={s.input} type="password" placeholder="eyJhbGciOiJIUzI1NiIs..."
+          value={serviceKey} onChange={e => setServiceKey(e.target.value)} />
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: -10, marginBottom: 16, lineHeight: 1.5 }}>
+          These will be pre-filled in your Render env vars on the next screen.
         </div>
       </div>
 
@@ -340,11 +342,7 @@ function StepSupabase({ onDone, onBack }) {
 
       <div style={s.btnRow}>
         <button onClick={onBack} style={s.backBtn}>← Back</button>
-        <button
-          onClick={run}
-          disabled={!url.trim() || !serviceKey.trim() || loading}
-          style={s.primaryBtn}
-        >
+        <button onClick={run} disabled={!url.trim() || !pat.trim() || loading} style={s.primaryBtn}>
           Set up database
         </button>
       </div>
@@ -360,10 +358,10 @@ function StepRender({ data, onDone, onBack }) {
   const [phase,   setPhase]   = useState('guide') // 'guide' | 'url'
 
   const envVars = [
-    { key: 'SUPABASE_URL',         value: data.supabaseUrl    || '(your Supabase project URL)' },
-    { key: 'SUPABASE_ANON_KEY',    value: '(Project Settings → API → anon public key)' },
-    { key: 'SUPABASE_SERVICE_KEY', value: data.serviceKey     || '(your Supabase service role key)' },
-    { key: 'GOOGLE_API_KEY',       value: data.geminiKey      || '(your Gemini API key)' },
+    { key: 'SUPABASE_URL',         value: data.supabaseUrl || '(your Supabase project URL)' },
+    { key: 'SUPABASE_ANON_KEY',    value: data.anonKey     || '(Project Settings → API → anon key)' },
+    { key: 'SUPABASE_SERVICE_KEY', value: data.serviceKey  || '(Project Settings → API → service_role key)' },
+    { key: 'GOOGLE_API_KEY',       value: data.geminiKey   || '(your Gemini API key)' },
     { key: 'CRON_SECRET',          value: '(ask Kartik for the master cron token)' },
     { key: 'NODE_ENV',             value: 'production' },
   ]

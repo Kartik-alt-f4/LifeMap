@@ -1,7 +1,7 @@
 // scripts/setup-supabase.js
-// Called by POST /setup-supabase on the server.
-// Fetches SQL files from GitHub and runs them against a new Supabase project
-// via the Supabase Management API (pg REST endpoint).
+// Uses Supabase Management API with a personal access token (PAT)
+// to run schema + functions + seed on a new project.
+// PAT is obtained from https://supabase.com/dashboard/account/tokens
 
 const GITHUB_RAW = 'https://raw.githubusercontent.com/Kartik-alt-f4/LifeMap/main'
 
@@ -11,123 +11,51 @@ async function fetchSQL(filename) {
   return res.text()
 }
 
-async function runSQL(supabaseUrl, serviceKey, sql) {
-  // Use the pg REST endpoint via Supabase's SQL execution API
-  const apiUrl = `${supabaseUrl}/rest/v1/rpc/exec_sql`
-
-  // Actually use the pg endpoint directly
-  const res = await fetch(`${supabaseUrl}/rest/v1/`, {
-    method: 'POST',
-    headers: {
-      'Content-Type':  'application/json',
-      'Authorization': `Bearer ${serviceKey}`,
-      'apikey':        serviceKey,
-    },
-  })
-
-  // Use Supabase Management API SQL endpoint
-  // Extract project ref from URL: https://xxxx.supabase.co -> xxxx
-  const projectRef = supabaseUrl.match(/https:\/\/([^.]+)\.supabase\.co/)?.[1]
-  if (!projectRef) throw new Error('Invalid Supabase URL format')
-
-  const sqlRes = await fetch(
+async function execSQL(projectRef, pat, sql) {
+  const res = await fetch(
     `https://api.supabase.com/v1/projects/${projectRef}/database/query`,
     {
       method: 'POST',
       headers: {
         'Content-Type':  'application/json',
-        'Authorization': `Bearer ${serviceKey}`,
+        'Authorization': `Bearer ${pat}`,
       },
       body: JSON.stringify({ query: sql }),
     }
   )
 
-  if (!sqlRes.ok) {
-    const err = await sqlRes.json().catch(() => ({}))
-    throw new Error(err.message ?? err.error ?? `SQL execution failed: ${sqlRes.status}`)
+  const data = await res.json().catch(() => ({}))
+
+  if (!res.ok) {
+    const msg = data?.message ?? data?.error ?? JSON.stringify(data)
+    // Ignore already-exists errors — schema is idempotent
+    if (msg.includes('already exists') || msg.includes('duplicate')) return { ok: true }
+    throw new Error(msg || `HTTP ${res.status}`)
   }
-  return sqlRes.json()
+  return data
 }
 
-export async function setupSupabase(supabaseUrl, serviceKey) {
-  const projectRef = supabaseUrl.match(/https:\/\/([^.]+)\.supabase\.co/)?.[1]
-  if (!projectRef) throw new Error('Invalid Supabase URL. Should be https://xxxx.supabase.co')
+export async function setupSupabase(supabaseUrl, pat) {
+  const match = supabaseUrl.match(/https:\/\/([^.]+)\.supabase\.co/)
+  if (!match) throw new Error('Invalid Supabase URL. Must be https://xxxx.supabase.co')
+  const projectRef = match[1]
+
+  const steps = [
+    { name: 'pgvector',  sql: 'CREATE EXTENSION IF NOT EXISTS vector;' },
+    { name: 'schema',    sql: await fetchSQL('schema.sql') },
+    { name: 'functions', sql: await fetchSQL('functions.sql') },
+    { name: 'seed',      sql: await fetchSQL('seed.sql') },
+  ]
 
   const results = []
-
-  // 1. Enable pgvector extension first
-  await fetch(
-    `https://api.supabase.com/v1/projects/${projectRef}/database/query`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type':  'application/json',
-        'Authorization': `Bearer ${serviceKey}`,
-      },
-      body: JSON.stringify({ query: 'CREATE EXTENSION IF NOT EXISTS vector;' }),
+  for (const step of steps) {
+    try {
+      await execSQL(projectRef, pat, step.sql)
+      results.push({ step: step.name, ok: true })
+    } catch (e) {
+      throw new Error(`${step.name} failed: ${e.message}`)
     }
-  )
-  results.push({ step: 'pgvector', ok: true })
-
-  // 2. Schema
-  const schema = await fetchSQL('schema.sql')
-  await fetch(
-    `https://api.supabase.com/v1/projects/${projectRef}/database/query`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type':  'application/json',
-        'Authorization': `Bearer ${serviceKey}`,
-      },
-      body: JSON.stringify({ query: schema }),
-    }
-  ).then(async r => {
-    if (!r.ok) {
-      const e = await r.json().catch(() => ({}))
-      throw new Error(`schema.sql failed: ${e.message ?? r.status}`)
-    }
-  })
-  results.push({ step: 'schema', ok: true })
-
-  // 3. Functions
-  const functions = await fetchSQL('functions.sql')
-  await fetch(
-    `https://api.supabase.com/v1/projects/${projectRef}/database/query`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type':  'application/json',
-        'Authorization': `Bearer ${serviceKey}`,
-      },
-      body: JSON.stringify({ query: functions }),
-    }
-  ).then(async r => {
-    if (!r.ok) {
-      const e = await r.json().catch(() => ({}))
-      throw new Error(`functions.sql failed: ${e.message ?? r.status}`)
-    }
-  })
-  results.push({ step: 'functions', ok: true })
-
-  // 4. Seed
-  const seed = await fetchSQL('seed.sql')
-  await fetch(
-    `https://api.supabase.com/v1/projects/${projectRef}/database/query`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type':  'application/json',
-        'Authorization': `Bearer ${serviceKey}`,
-      },
-      body: JSON.stringify({ query: seed }),
-    }
-  ).then(async r => {
-    if (!r.ok) {
-      const e = await r.json().catch(() => ({}))
-      throw new Error(`seed.sql failed: ${e.message ?? r.status}`)
-    }
-  })
-  results.push({ step: 'seed', ok: true })
+  }
 
   return { ok: true, steps: results, projectRef }
 }
