@@ -58,11 +58,23 @@ export function clearStoredConfig() {
 }
 
 // Health check — used by setup wizard to validate Render URL
-export async function checkHealth(renderUrl) {
+export async function checkHealth(renderUrl, onRetry) {
   const url = renderUrl.replace(/\/$/, '')
-  const res = await fetch(`${url}/health`, { signal: AbortSignal.timeout(10000) })
-  if (!res.ok) throw new Error(`Health check failed: ${res.status}`)
-  return res.json()
+  const attempts = [10000, 30000, 45000] // progressively longer for cold starts
+
+  let lastError
+  for (let i = 0; i < attempts.length; i++) {
+    try {
+      if (i > 0) onRetry?.(i)
+      const res = await fetch(`${url}/health`, { signal: AbortSignal.timeout(attempts[i]) })
+      if (!res.ok) throw new Error(`Health check failed: ${res.status}`)
+      return await res.json()
+    } catch (e) {
+      lastError = e
+      if (i < attempts.length - 1) await new Promise(r => setTimeout(r, 2000))
+    }
+  }
+  throw new Error('Could not reach server. It may still be starting up — wait a minute and try again.')
 }
 
 export const getConfig    = ()      => req('/config')

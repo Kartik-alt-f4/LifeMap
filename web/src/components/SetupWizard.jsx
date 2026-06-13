@@ -405,10 +405,11 @@ function downloadEnvFile(data, cronSecret) {
 
 // ── Step 4: Render Setup ──────────────────────────────────────────────────────
 function StepRender({ data, onDone, onBack }) {
-  const [url,     setUrl]     = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error,   setError]   = useState('')
-  const [phase,   setPhase]   = useState('guide') // 'guide' | 'url'
+  const [url,      setUrl]      = useState('')
+  const [loading,  setLoading]  = useState(false)
+  const [error,    setError]    = useState('')
+  const [phase,    setPhase]    = useState('guide') // 'guide' | 'url'
+  const [wakingUp, setWakingUp] = useState(false)
 
   const envVars = [
     { key: 'SUPABASE_URL',         value: data.supabaseUrl || '(your Supabase project URL)' },
@@ -425,14 +426,14 @@ function StepRender({ data, onDone, onBack }) {
       setError('Enter a valid Render URL (e.g. https://lifemap-yourname.onrender.com)')
       return
     }
-    setLoading(true); setError('')
+    setLoading(true); setError(''); setWakingUp(false)
     try {
-      await checkHealth(cleaned)
+      await checkHealth(cleaned, () => setWakingUp(true))
       await registerWithServer(cleaned, data.name, data.googleUid)
       onDone({ renderUrl: cleaned })
     } catch (e) {
       setError(e.message ?? 'Could not reach that URL. Is Render fully deployed?')
-    } finally { setLoading(false) }
+    } finally { setLoading(false); setWakingUp(false) }
   }
 
   if (phase === 'guide') return (
@@ -549,9 +550,12 @@ function StepRender({ data, onDone, onBack }) {
 
       {loading && (
         <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
-          Checking your server… this may take up to 30s if Render is waking up.
+          {wakingUp
+            ? 'Your server is waking up from sleep — this can take up to a minute on first deploy…'
+            : 'Checking your server…'}
         </div>
       )}
+
 
       <div style={s.btnRow}>
         <button onClick={() => setPhase('guide')} style={s.backBtn}>← Back</button>
@@ -748,4 +752,4 @@ const s = {
     background: 'none', border: 'none', cursor: 'pointer',
     textDecoration: 'underline',
   },
-}
+} 
