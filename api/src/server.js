@@ -14,7 +14,8 @@ import {
   getPlayerState, getTasksForDate, createTask, createTemplate, editTask,
   skipTask, cancelTask, completeTask, getTemplates, deactivateTemplate,
   getSkills, getStats, getShopWithCounts, buyItem,
-  getSnapshots, getCalendar, savePushToken, logLeisure, getTodayLeisure
+  getSnapshots, getCalendar, savePushToken,
+  generateDescription, logLeisure, getTodayLeisure, createShopItem
 } from './dbAgent.js'
 import { calculateCompletion } from './rpgEngine.js'
 
@@ -268,6 +269,21 @@ app.post('/chat', async (req, res) => {
 // SKILLS / STATS / SHOP / GRAPHS
 // ─────────────────────────────────────────────────────────────────────────────
 app.get('/skills',    async (_, res) => { try { res.json(await getSkills()) }           catch (e) { res.status(500).json({ error: e.message }) } })
+
+app.patch('/skills/:id', async (req, res) => {
+  try {
+    const { name, description } = req.body
+    if (!name?.trim() && !description?.trim()) return res.status(400).json({ error: 'name or description required' })
+    const { supabase } = await import('./supabaseClient.js')
+    const update = {}
+    if (name?.trim())        update.name        = name.trim()
+    if (description?.trim()) update.description = description.trim()
+    const { data, error } = await supabase
+      .from('skill').update(update).eq('id', parseInt(req.params.id)).select().single()
+    if (error) throw error
+    res.json(data)
+  } catch (e) { res.status(400).json({ error: e.message }) }
+})
 app.get('/stats',     async (_, res) => { try { res.json(await getStats()) }            catch (e) { res.status(500).json({ error: e.message }) } })
 
 app.patch('/stats/:id', async (req, res) => {
@@ -283,19 +299,6 @@ app.patch('/stats/:id', async (req, res) => {
   } catch (e) { res.status(400).json({ error: e.message }) }
 })
 app.get('/shop',      async (_, res) => { try { res.json(await getShopWithCounts()) }   catch (e) { res.status(500).json({ error: e.message }) } })
-
-app.get('/leisure/today', async (_, res) => {
-  try { res.json(await getTodayLeisure()) }
-  catch (e) { res.status(500).json({ error: e.message }) }
-})
-
-app.post('/leisure/log', async (req, res) => {
-  try {
-    const { shop_item_id, quantity, unit, notes } = req.body
-    if (!shop_item_id) return res.status(400).json({ error: 'shop_item_id required' })
-    res.json(await logLeisure(shop_item_id, quantity ?? 1, unit ?? null, notes ?? null))
-  } catch (e) { res.status(400).json({ error: e.message }) }
-})
 app.get('/snapshots', async (_, res) => { try { res.json(await getSnapshots()) }        catch (e) { res.status(500).json({ error: e.message }) } })
 app.get('/calendar',  async (req, res) => {
   try {
@@ -315,7 +318,7 @@ app.post('/shop', async (req, res) => {
         name:        name.trim(),
         description: description?.trim() ?? '',
         cost_gold:   parseInt(cost_gold) || 10,
-        type:        ['leisure','day_off'].includes(type) ? type : 'leisure',
+        type:        ['leisure','day_off','day_off_plus'].includes(type) ? type : 'leisure',
         active:      true
       })
       .select().single()
@@ -323,6 +326,21 @@ app.post('/shop', async (req, res) => {
     res.json(data)
   } catch (e) { res.status(400).json({ error: e.message }) }
 })
+
+app.get('/leisure/today', async (_, res) => {
+  try { res.json(await getTodayLeisure()) }
+  catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+app.post('/leisure/log', async (req, res) => {
+  try {
+    const { shop_item_id, quantity, unit, notes } = req.body
+    if (!shop_item_id) return res.status(400).json({ error: 'shop_item_id required' })
+    res.json(await logLeisure(shop_item_id, quantity ?? 1, unit ?? null, notes ?? null))
+  } catch (e) { res.status(400).json({ error: e.message }) }
+})
+
+app.patch('/stats/re-embed', async (req, res) => res.status(405).json({ error: 'use POST' }))
 
 app.post('/shop/:id/buy', async (req, res) => {
   try { res.json(await buyItem(parseInt(req.params.id))) }
