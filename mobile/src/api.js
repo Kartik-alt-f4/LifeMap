@@ -9,7 +9,6 @@ async function req(path, options = {}) {
 
   const text = await res.text()
 
-  // If we got HTML back, the server returned an error page
   if (text.trim().startsWith('<')) {
     console.error(`[api] HTML response for ${path}:`, text.slice(0, 200))
     throw new Error(`Server error on ${path} — check Render logs`)
@@ -27,6 +26,7 @@ async function req(path, options = {}) {
   return data
 }
 
+export const getConfig    = ()      => req('/config')
 export const getState     = ()      => req('/state')
 export const getTasks     = (date)  => req(`/tasks${date ? `?date=${date}` : ''}`)
 export const completeTask = (id)    => req(`/tasks/${id}/complete`, { method: 'POST', body: JSON.stringify({}) })
@@ -38,5 +38,5 @@ export const getShop      = ()      => req('/shop')
 export const buyItem      = (id)    => req(`/shop/${id}/buy`, { method: 'POST', body: JSON.stringify({}) })
 export const registerPush = (token, platform) =>
   req('/notifications/register', { method: 'POST', body: JSON.stringify({ token, platform }) })
-
 export const getSkills    = ()      => req('/skills')
+export const editTask     = (id, body) => req(`/tasks/${id}`, { method: 'PATCH', body: JSON.stringify(body) })

@@ -12,6 +12,29 @@ const PRIORITIES = ['P0','P1','P2','P3']
 const DIFFS      = ['low','medium','high']
 const BLOCKS     = ['morning','noon','evening','night','midnight']
 
+function computeRewards(task, config) {
+  const g = config?.game
+  if (!g) return null
+  const xp = Math.max(0,
+    (g.tasks.xp_base[task.task_type]                ?? 0) +
+    (g.tasks.difficulty_xp_offset?.[task.difficulty] ?? 0)
+  )
+  const gold = Math.max(g.tasks.gold_floor ?? 1,
+    (g.tasks.gold_base[task.task_type]                ?? 0) +
+    (g.tasks.difficulty_gold_offset?.[task.difficulty] ?? 0)
+  )
+  const energyBase   = g.energy.drain_by_type?.[task.task_type]            ?? 5
+  const energyOffset = g.energy.drain_difficulty_offset?.[task.difficulty] ?? 0
+  const energy       = Math.max(g.energy.drain_floor ?? 1, energyBase + energyOffset)
+  return { xp, gold, energy }
+}
+
+function formatScheduledTime(scheduled_at) {
+  if (!scheduled_at) return null
+  const d = new Date(scheduled_at)
+  return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+}
+
 function Seg({ options, value, onChange, colorMap, allowDeselect }) {
   return (
     <View style={s.segGroup}>
@@ -39,7 +62,7 @@ function Toggle({ label, value, onChange }) {
   )
 }
 
-export default function TaskDrawer({ task, visible, onClose, onComplete, onSkip, onCancel, onEdited }) {
+export default function TaskDrawer({ task, config, visible, onClose, onComplete, onSkip, onCancel, onEdited }) {
   const [editing,     setEditing]    = useState(false)
   const [saving,      setSaving]     = useState(false)
   const [title,       setTitle]      = useState('')
@@ -74,6 +97,15 @@ export default function TaskDrawer({ task, visible, onClose, onComplete, onSkip,
   const isPending   = task.status === 'pending'
   const isCompleted = task.status === 'completed'
   const isSkipped   = task.status === 'skipped'
+
+  // Compute rewards from config — null if config not loaded yet
+  const rewards = computeRewards(
+    editing ? { ...task, task_type: taskType, difficulty } : task,
+    config
+  )
+
+  // Scheduled time string for display
+  const scheduledTimeStr = formatScheduledTime(task.scheduled_at)
 
   const saveEdit = async () => {
     setSaving(true)
@@ -154,20 +186,48 @@ export default function TaskDrawer({ task, visible, onClose, onComplete, onSkip,
             ) : (
               <>
                 <Text style={s.taskTitle}>{task.title}</Text>
+
+                {/* Tags row */}
                 <View style={s.tags}>
                   <Text style={[s.tag, { color: prColor }]}>{task.priority}</Text>
                   <Text style={s.tag}>{task.difficulty}</Text>
                   {task.time_block && <Text style={s.tag}>{task.time_block}</Text>}
+                  {scheduledTimeStr && (
+                    <Text style={[s.tag, { color: colors.accent }]}>🕐 {scheduledTimeStr}</Text>
+                  )}
                   {task.is_recovery && <Text style={[s.tag, { color: colors.success }]}>recovery</Text>}
                   {task.scheduled_for && task.scheduled_for !== new Date().toISOString().split('T')[0] &&
                     <Text style={[s.tag, { color: colors.warning }]}>{task.scheduled_for}</Text>}
                   {task.late_multiplier < 1.0 &&
                     <Text style={[s.tag, { color: colors.warning }]}>−{Math.round((1 - task.late_multiplier) * 100)}% late</Text>}
                 </View>
+
+                {/* Description */}
                 {task.description
                   ? <View style={s.descBox}><Text style={s.descText}>{task.description}</Text></View>
                   : <Text style={s.descEmpty}>No description yet — AI generates after completion.</Text>
                 }
+
+                {/* Rewards row */}
+                {rewards && (
+                  <View style={s.rewardsRow}>
+                    <View style={s.rewardItem}>
+                      <Text style={s.rewardLabel}>XP</Text>
+                      <Text style={[s.rewardValue, { color: colors.accent }]}>+{rewards.xp}</Text>
+                    </View>
+                    <View style={s.rewardDivider} />
+                    <View style={s.rewardItem}>
+                      <Text style={s.rewardLabel}>GOLD</Text>
+                      <Text style={[s.rewardValue, { color: colors.gold }]}>+{rewards.gold}g</Text>
+                    </View>
+                    <View style={s.rewardDivider} />
+                    <View style={s.rewardItem}>
+                      <Text style={s.rewardLabel}>ENERGY</Text>
+                      <Text style={[s.rewardValue, { color: colors.textMuted }]}>−{rewards.energy}⚡</Text>
+                    </View>
+                  </View>
+                )}
+
                 {isCompleted && <Text style={s.statusDone}>✓ Completed</Text>}
                 {isSkipped   && <Text style={s.statusSkipped}>Skipped</Text>}
               </>
@@ -234,6 +294,14 @@ const s = StyleSheet.create({
   descBox:       { backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: 11 },
   descText:      { fontSize: 12, color: colors.textMuted, lineHeight: 18 },
   descEmpty:     { fontSize: 11, color: colors.textDim, fontStyle: 'italic' },
+
+  // Rewards row
+  rewardsRow:    { flexDirection: 'row', backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.border, borderRadius: 8, overflow: 'hidden' },
+  rewardItem:    { flex: 1, alignItems: 'center', paddingVertical: 10, gap: 3 },
+  rewardDivider: { width: 1, backgroundColor: colors.border, marginVertical: 8 },
+  rewardLabel:   { fontSize: 9, fontWeight: '700', color: colors.textDim, letterSpacing: 0.8 },
+  rewardValue:   { fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'] },
+
   statusDone:    { fontSize: 13, color: colors.success, fontWeight: '600', textAlign: 'center', paddingVertical: 4 },
   statusSkipped: { fontSize: 13, color: colors.textMuted, textAlign: 'center', paddingVertical: 4 },
   field:         { gap: 6 },

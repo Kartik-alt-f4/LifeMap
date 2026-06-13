@@ -5,7 +5,7 @@ import {
   RefreshControl, ActivityIndicator
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { getState, getTasks, completeTask, skipTask, cancelTask } from '../api'
+import { getState, getTasks, completeTask, skipTask, cancelTask, getConfig } from '../api'
 import { colors, type as typeMap, priority as priorityColors } from '../theme'
 import TaskDrawer   from '../components/TaskDrawer'
 
@@ -86,6 +86,7 @@ export default function TodayScreen() {
   const insets = useSafeAreaInsets()
   const [player,     setPlayer]     = useState(null)
   const [tasks,      setTasks]      = useState([])
+  const [config,     setConfig]     = useState(null)
   const [loading,    setLoading]    = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [selected,   setSelected]   = useState(null)
@@ -122,6 +123,11 @@ export default function TodayScreen() {
     finally { setLoading(false); setRefreshing(false) }
   }
 
+  // Config fetched once on mount — doesn't need to refresh with tasks
+  useEffect(() => {
+    getConfig().then(setConfig).catch(e => console.error('[config]', e))
+  }, [])
+
   useEffect(() => { load(date) }, [date])
 
   const handleComplete = async (id) => {
@@ -145,10 +151,8 @@ export default function TodayScreen() {
   return (
     <View style={[s.container, { paddingTop: insets.top }]}>
 
-      {/* Player header — mirrors web navbar stat section */}
       {player && (
         <View style={[s.header, isDayOff && s.headerDayOff]}>
-          {/* Row 1: level + rank + badges */}
           <View style={s.headerRow1}>
             <View style={s.levelBlock}>
               <Text style={s.levelText}>Lv.{player.level}</Text>
@@ -166,16 +170,11 @@ export default function TodayScreen() {
               <Text style={s.goldBadge}>◆ {player.available_gold}g</Text>
             </View>
           </View>
-
-          {/* Energy bar — dominant asset */}
           <EnergyBar current={player.energy?.current ?? 0} max={player.energy?.max ?? 100} />
-
-          {/* Summary */}
           <Text style={s.summaryText}>{pending} pending · {completed} done</Text>
         </View>
       )}
 
-      {/* Date nav — symmetric ‹ date › */}
       <View style={s.dateNav}>
         <TouchableOpacity style={s.dateNavBtn} onPress={() => shiftDate(-1)}>
           <Text style={s.dateNavArrow}>‹</Text>
@@ -190,7 +189,6 @@ export default function TodayScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Task list */}
       <View style={s.listHeader}>
         <Text style={s.listTitle}>TASKS</Text>
         <View style={s.countBadge}>
@@ -211,6 +209,7 @@ export default function TodayScreen() {
 
       <TaskDrawer
         task={selected}
+        config={config}
         visible={!!selected}
         onClose={() => setSelected(null)}
         onComplete={handleComplete}
@@ -225,8 +224,6 @@ export default function TodayScreen() {
 const s = StyleSheet.create({
   container:    { flex: 1, backgroundColor: colors.bg },
   center:       { alignItems: 'center', justifyContent: 'center' },
-
-  // Header — mirrors web navbar stat section
   header:       { backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border, padding: 14, gap: 9 },
   headerDayOff: { borderBottomColor: 'rgba(62,207,142,0.35)', backgroundColor: 'rgba(62,207,142,0.03)' },
   headerRow1:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -238,8 +235,6 @@ const s = StyleSheet.create({
   goldBadge:    { fontSize: 12, fontWeight: '600', color: colors.gold, fontVariant: ['tabular-nums'] },
   dayOffBadge:  { backgroundColor: 'rgba(62,207,142,0.12)', borderWidth: 1, borderColor: 'rgba(62,207,142,0.3)', borderRadius: 3, paddingHorizontal: 6, paddingVertical: 2 },
   dayOffText:   { fontSize: 9, fontWeight: '700', color: '#3ecf8e', letterSpacing: 0.6 },
-
-  // Energy bar — dominant, tall, colour-coded
   barBlock:       { gap: 5 },
   barLabelRow:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   barLabel:       { fontSize: 10, fontWeight: '700', color: colors.textMuted, letterSpacing: 0.6, textTransform: 'uppercase' },
@@ -249,22 +244,16 @@ const s = StyleSheet.create({
   energyFill:     { height: '100%', borderRadius: 7, justifyContent: 'center', paddingLeft: 8 },
   energyPct:      { fontSize: 9, fontWeight: '700', color: 'rgba(255,255,255,0.7)', lineHeight: 14 },
   summaryText:  { fontSize: 10, color: colors.textMuted },
-
-  // Date nav
   dateNav:       { flexDirection: 'row', alignItems: 'center', paddingVertical: 9, paddingHorizontal: 14, backgroundColor: colors.surface2, borderBottomWidth: 1, borderBottomColor: colors.border },
   dateNavBtn:    { width: 32, height: 32, borderRadius: 6, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   dateNavArrow:  { fontSize: 18, color: colors.textMuted },
   dateLabelBtn:  { flex: 1, alignItems: 'center', justifyContent: 'center' },
   dateLabel:     { fontSize: 12, fontWeight: '600', color: colors.text, letterSpacing: 0.3 },
   dateLabelPast: { color: colors.textMuted },
-
-  // List header
   listHeader:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.border },
   listTitle:    { fontSize: 9, fontWeight: '700', color: colors.textMuted, letterSpacing: 1.2 },
   countBadge:   { backgroundColor: colors.surface2, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 1 },
   countText:    { fontSize: 10, color: colors.textMuted, fontVariant: ['tabular-nums'] },
-
-  // Task rows — mirrors web task-row
   taskRow:      { flexDirection: 'row', alignItems: 'center', padding: 10, paddingHorizontal: 14, borderLeftWidth: 2, borderLeftColor: 'transparent', gap: 10 },
   taskDone:     { borderLeftColor: colors.success, backgroundColor: 'rgba(62,207,142,0.05)' },
   taskSkipped:  { borderLeftColor: '#6b52c8', backgroundColor: 'rgba(107,82,200,0.05)', opacity: 0.65 },

@@ -1,24 +1,29 @@
 {
   "expo": {
-    "name": "MyApp",
-    "slug": "my-app",
+    "name": "Life Map",
+    "slug": "lifemap",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
-    "ios": {
-      "supportsTablet": true
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0f1221"
     },
     "android": {
+      "package": "com.kartik.lifemap",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0f1221"
       }
     },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.kartik.lifemap"
+    },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/icon.png"
     }
   }
 }
