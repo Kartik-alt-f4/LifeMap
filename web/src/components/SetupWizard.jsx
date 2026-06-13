@@ -40,6 +40,22 @@ async function validateGeminiKey(key, renderUrl) {
   return true
 }
 
+async function setupSupabase(supabaseUrl, serviceKey) {
+  // Routes through your server to avoid CORS
+  const base = 'https://lifemap-b0ms.onrender.com'
+  const res  = await fetch(`${base}/setup-supabase`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ supabaseUrl, serviceKey }),
+    signal:  AbortSignal.timeout(60000), // schema runs can take ~30s
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error ?? 'Supabase setup failed')
+  }
+  return res.json()
+}
+
 async function registerWithServer(renderUrl, name, googleUid) {
   const url = renderUrl.replace(/\/$/, '')
   const res = await fetch(`${url}/register`, {
@@ -214,7 +230,129 @@ function StepGemini({ onDone, onBack }) {
   )
 }
 
-// ── Step 3: Render Setup ──────────────────────────────────────────────────────
+// ── Step 3: Supabase Setup ───────────────────────────────────────────────────
+function StepSupabase({ onDone, onBack }) {
+  const [url,        setUrl]        = useState('')
+  const [serviceKey, setServiceKey] = useState('')
+  const [loading,    setLoading]    = useState(false)
+  const [phase,      setPhase]      = useState('input') // 'input' | 'running'
+  const [progress,   setProgress]   = useState('')
+  const [error,      setError]      = useState('')
+
+  const run = async () => {
+    const cleanUrl = url.trim().replace(/\/$/, '')
+    if (!cleanUrl || !serviceKey.trim()) return
+    setLoading(true); setError(''); setPhase('running')
+
+    try {
+      setProgress('Enabling pgvector extension…')
+      await new Promise(r => setTimeout(r, 800))
+      setProgress('Running schema.sql…')
+      await new Promise(r => setTimeout(r, 800))
+      setProgress('Running functions.sql…')
+
+      await setupSupabase(cleanUrl, serviceKey.trim())
+
+      setProgress('Seeding default data…')
+      await new Promise(r => setTimeout(r, 400))
+      setProgress('Done!')
+      await new Promise(r => setTimeout(r, 600))
+
+      onDone({
+        supabaseUrl:    cleanUrl,
+        supabaseAnonKey: '', // user will paste anon key in Render step
+        serviceKey:     serviceKey.trim(),
+      })
+    } catch (e) {
+      setError(e.message)
+      setPhase('input')
+    } finally { setLoading(false) }
+  }
+
+  if (phase === 'running') return (
+    <div style={{ textAlign: 'center' }}>
+      <div style={{ fontSize: 32, marginBottom: 16 }}>⚙️</div>
+      <h2 style={s.stepTitle}>Setting up your database</h2>
+      <p style={{ ...s.stepDesc, color: 'var(--accent)' }}>{progress}</p>
+      <div style={{
+        width: '100%', height: 4, background: 'var(--surface3)',
+        borderRadius: 2, overflow: 'hidden', marginTop: 8,
+      }}>
+        <div style={{
+          height: '100%', background: 'var(--accent)', borderRadius: 2,
+          width: '60%', animation: 'shimmer 1.4s infinite',
+        }} />
+      </div>
+    </div>
+  )
+
+  return (
+    <div>
+      <div style={s.stepIcon}>🗄️</div>
+      <h2 style={s.stepTitle}>Set up your database</h2>
+      <p style={s.stepDesc}>
+        Create a free Supabase project, then paste your credentials here.
+        We'll set up the database automatically.
+      </p>
+
+      <a href="https://supabase.com" target="_blank" rel="noreferrer" style={s.linkBtn}>
+        Open Supabase →
+      </a>
+
+      <div style={{
+        background: 'var(--surface2)', border: '1px solid var(--border)',
+        borderRadius: 'var(--radius-sm)', padding: '12px 14px',
+        fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.7,
+        marginTop: 16, marginBottom: 20,
+      }}>
+        <strong style={{ color: 'var(--text)' }}>Steps:</strong><br/>
+        1. Create account + new project on Supabase<br/>
+        2. Go to <span style={{ color: 'var(--accent)', fontFamily: 'var(--mono)' }}>Project Settings → API</span><br/>
+        3. Copy <strong style={{ color: 'var(--text)' }}>Project URL</strong> and <strong style={{ color: 'var(--text)' }}>service_role key</strong>
+      </div>
+
+      <div style={{ marginBottom: 6 }}>
+        <label style={s.fieldLabel}>Project URL</label>
+        <input
+          style={s.input}
+          type="url"
+          placeholder="https://xxxx.supabase.co"
+          value={url}
+          onChange={e => setUrl(e.target.value)}
+        />
+      </div>
+
+      <div style={{ marginBottom: 6 }}>
+        <label style={s.fieldLabel}>Service Role Key (secret)</label>
+        <input
+          style={s.input}
+          type="password"
+          placeholder="eyJhbGciOiJIUzI1NiIs..."
+          value={serviceKey}
+          onChange={e => setServiceKey(e.target.value)}
+        />
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: -10, marginBottom: 16, lineHeight: 1.5 }}>
+          This is only used once to set up your schema. It's never stored.
+        </div>
+      </div>
+
+      {error && <div style={s.error}>{error}</div>}
+
+      <div style={s.btnRow}>
+        <button onClick={onBack} style={s.backBtn}>← Back</button>
+        <button
+          onClick={run}
+          disabled={!url.trim() || !serviceKey.trim() || loading}
+          style={s.primaryBtn}
+        >
+          Set up database
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Step 4: Render Setup ──────────────────────────────────────────────────────
 function StepRender({ data, onDone, onBack }) {
   const [url,     setUrl]     = useState('')
   const [loading, setLoading] = useState(false)
@@ -222,10 +360,10 @@ function StepRender({ data, onDone, onBack }) {
   const [phase,   setPhase]   = useState('guide') // 'guide' | 'url'
 
   const envVars = [
-    { key: 'SUPABASE_URL',         value: '(your Supabase project URL)' },
-    { key: 'SUPABASE_ANON_KEY',    value: '(your Supabase anon key)' },
-    { key: 'SUPABASE_SERVICE_KEY', value: '(your Supabase service role key)' },
-    { key: 'GOOGLE_API_KEY',       value: data.geminiKey },
+    { key: 'SUPABASE_URL',         value: data.supabaseUrl    || '(your Supabase project URL)' },
+    { key: 'SUPABASE_ANON_KEY',    value: '(Project Settings → API → anon public key)' },
+    { key: 'SUPABASE_SERVICE_KEY', value: data.serviceKey     || '(your Supabase service role key)' },
+    { key: 'GOOGLE_API_KEY',       value: data.geminiKey      || '(your Gemini API key)' },
     { key: 'CRON_SECRET',          value: '(ask Kartik for the master cron token)' },
     { key: 'NODE_ENV',             value: 'production' },
   ]
@@ -375,7 +513,7 @@ export default function SetupWizard({ onComplete }) {
     onComplete(config)
   }
 
-  const TOTAL = 4
+  const TOTAL = 5
 
   return (
     <div style={s.overlay}>
@@ -395,10 +533,11 @@ export default function SetupWizard({ onComplete }) {
 
         <Steps current={step} total={TOTAL} />
 
-        {step === 0 && <StepSignIn  onDone={advance} />}
-        {step === 1 && <StepGemini  onDone={advance} onBack={() => setStep(0)} data={data} />}
-        {step === 2 && <StepRender  onDone={advance} onBack={() => setStep(1)} data={data} />}
-        {step === 3 && <StepDone    onEnter={finish} />}
+        {step === 0 && <StepSignIn   onDone={advance} />}
+        {step === 1 && <StepGemini   onDone={advance} onBack={() => setStep(0)} data={data} />}
+        {step === 2 && <StepSupabase onDone={advance} onBack={() => setStep(1)} data={data} />}
+        {step === 3 && <StepRender   onDone={advance} onBack={() => setStep(2)} data={data} />}
+        {step === 4 && <StepDone     onEnter={finish} />}
       </div>
     </div>
   )

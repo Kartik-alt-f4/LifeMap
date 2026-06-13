@@ -404,6 +404,24 @@ app.post('/validate-gemini', async (req, res) => {
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
+// SUPABASE SETUP — called by setup wizard to auto-run schema + seed
+// Add to imports at top: import { setupSupabase } from '../../scripts/setup-supabase.js'
+// ─────────────────────────────────────────────────────────────────────────────
+app.post('/setup-supabase', async (req, res) => {
+  try {
+    const { supabaseUrl, serviceKey } = req.body
+    if (!supabaseUrl) return res.status(400).json({ error: 'supabaseUrl required' })
+    if (!serviceKey)  return res.status(400).json({ error: 'serviceKey required' })
+ 
+    const result = await setupSupabase(supabaseUrl, serviceKey)
+    res.json(result)
+  } catch (e) {
+    console.error('Supabase setup error:', e.message)
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
 // CRON ENDPOINTS (GitHub Actions only)
 // ─────────────────────────────────────────────────────────────────────────────
 app.post('/cron/morning', cronAuth, async (_, res) => {
