@@ -34,7 +34,11 @@ async function validateGeminiKey(key) {
       signal:  AbortSignal.timeout(10000),
     }
   )
-  if (!res.ok) throw new Error('Invalid Gemini key')
+  const data = await res.json().catch(() => ({}))
+  // Only fail on explicit invalid key — quota errors (429) and other codes mean key is valid
+  if (res.status === 400 && data?.error?.status === 'API_KEY_INVALID') {
+    throw new Error('Invalid Gemini key — check it and try again')
+  }
   return true
 }
 
