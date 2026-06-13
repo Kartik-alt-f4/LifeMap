@@ -259,14 +259,17 @@ export default function ProfileScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      {/* Header buttons */}
-      <View style={[sp.headerBtns, { top: insets.top + 8 }]}>
-        <TouchableOpacity style={sp.iconBtn} onPress={() => setShowGraphs(true)}>
-          <Text style={sp.iconText}>📊</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={sp.iconBtn} onPress={() => setShowSettings(true)}>
-          <Text style={sp.iconText}>⚙</Text>
-        </TouchableOpacity>
+      {/* Header bar with title + action buttons */}
+      <View style={sp.topBar}>
+        <Text style={sp.topBarTitle}>PROFILE</Text>
+        <View style={sp.topBarActions}>
+          <TouchableOpacity style={sp.iconBtn} onPress={() => setShowGraphs(true)}>
+            <Text style={sp.iconText}>📊</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={sp.iconBtn} onPress={() => setShowSettings(true)}>
+            <Text style={sp.iconText}>⚙</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -438,9 +441,11 @@ const styles = StyleSheet.create({
 
 // Settings panel styles
 const sp = StyleSheet.create({
-  headerBtns:   { position: 'absolute', right: 14, zIndex: 10, flexDirection: 'row', gap: 8 },
-  iconBtn:      { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
-  iconText:     { fontSize: 14 },
+  topBar:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 11, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border },
+  topBarTitle:  { fontSize: 9, fontWeight: '700', color: colors.textMuted, letterSpacing: 1.4 },
+  topBarActions:{ flexDirection: 'row', gap: 8 },
+  iconBtn:      { width: 30, height: 30, borderRadius: 15, backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  iconText:     { fontSize: 13 },
   overlay:      { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.65)' },
   sheet:        { backgroundColor: colors.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingTop: 12, height: '92%', borderTopWidth: 1, borderColor: colors.borderHi, overflow: 'hidden' },
   handle:       { width: 36, height: 4, backgroundColor: colors.border, borderRadius: 2, alignSelf: 'center', marginBottom: 14 },

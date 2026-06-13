@@ -80,7 +80,7 @@ export default function ChatScreen() {
         </View>
       )}
 
-      <View style={[styles.inputBar, { paddingBottom: insets.bottom + 72 }]}>
+      <View style={[styles.inputBar, { paddingBottom: insets.bottom + 8 }]}>
         <TextInput
           style={styles.input}
           value={input}

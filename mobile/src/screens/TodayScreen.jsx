@@ -18,23 +18,6 @@ function isOverdue(task) {
   return false
 }
 
-function XpBar({ current, max }) {
-  const pct = Math.min(100, Math.max(0, (current / (max || 1)) * 100))
-  return (
-    <View style={s.barBlock}>
-      <View style={s.barLabelRow}>
-        <Text style={s.barLabel}>LEVEL</Text>
-        <Text style={[s.barValueText, { color: colors.accent }]}>
-          {current}<Text style={s.barValueMax}> / {max} XP</Text>
-        </Text>
-      </View>
-      <View style={s.xpTrack}>
-        <View style={[s.xpFill, { width: `${pct}%` }]} />
-      </View>
-    </View>
-  )
-}
-
 function EnergyBar({ current, max }) {
   const pct   = Math.min(100, Math.max(0, (current / (max || 1)) * 100))
   const color = current < max * 0.10 ? colors.energyRecovery
@@ -50,7 +33,9 @@ function EnergyBar({ current, max }) {
         </Text>
       </View>
       <View style={s.energyTrack}>
-        <View style={[s.energyFill, { width: `${pct}%`, backgroundColor: color }]} />
+        <View style={[s.energyFill, { width: `${pct}%`, backgroundColor: color }]}>
+          {pct > 15 && <Text style={s.energyPct}>{Math.round(pct)}%</Text>}
+        </View>
       </View>
     </View>
   )
@@ -182,33 +167,27 @@ export default function TodayScreen() {
             </View>
           </View>
 
-          {/* XP bar */}
-          <XpBar current={player.current_xp} max={player.xp_to_next} />
-
-          {/* Energy bar */}
+          {/* Energy bar — dominant asset */}
           <EnergyBar current={player.energy?.current ?? 0} max={player.energy?.max ?? 100} />
 
-          {/* Row 4: summary */}
+          {/* Summary */}
           <Text style={s.summaryText}>{pending} pending · {completed} done</Text>
         </View>
       )}
 
-      {/* Date nav — mirrors web date-selector */}
+      {/* Date nav — symmetric ‹ date › */}
       <View style={s.dateNav}>
         <TouchableOpacity style={s.dateNavBtn} onPress={() => shiftDate(-1)}>
           <Text style={s.dateNavArrow}>‹</Text>
         </TouchableOpacity>
-        <Text style={[s.dateLabel, !isToday && { color: colors.textMuted }]}>
-          {formatDateLabel(date)}
-        </Text>
+        <TouchableOpacity style={s.dateLabelBtn} onPress={() => setDate(todayStr())} disabled={isToday}>
+          <Text style={[s.dateLabel, !isToday && s.dateLabelPast]}>
+            {formatDateLabel(date)}
+          </Text>
+        </TouchableOpacity>
         <TouchableOpacity style={s.dateNavBtn} onPress={() => shiftDate(1)}>
           <Text style={s.dateNavArrow}>›</Text>
         </TouchableOpacity>
-        {!isToday && (
-          <TouchableOpacity style={s.todayPill} onPress={() => setDate(todayStr())}>
-            <Text style={s.todayPillText}>Today</Text>
-          </TouchableOpacity>
-        )}
       </View>
 
       {/* Task list */}
@@ -260,26 +239,24 @@ const s = StyleSheet.create({
   dayOffBadge:  { backgroundColor: 'rgba(62,207,142,0.12)', borderWidth: 1, borderColor: 'rgba(62,207,142,0.3)', borderRadius: 3, paddingHorizontal: 6, paddingVertical: 2 },
   dayOffText:   { fontSize: 9, fontWeight: '700', color: '#3ecf8e', letterSpacing: 0.6 },
 
-  // XP bar — thinner, accent purple
-  barBlock:       { gap: 4 },
+  // Energy bar — dominant, tall, colour-coded
+  barBlock:       { gap: 5 },
   barLabelRow:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  barLabel:       { fontSize: 9, fontWeight: '700', color: colors.textMuted, letterSpacing: 0.8, textTransform: 'uppercase' },
-  barValueText:   { fontSize: 10, fontWeight: '600', fontVariant: ['tabular-nums'] },
-  barValueMax:    { color: colors.textMuted, fontWeight: '400' },
-  xpTrack:        { height: 3, backgroundColor: colors.surface3, borderRadius: 2, overflow: 'hidden' },
-  xpFill:         { height: '100%', backgroundColor: colors.accent, borderRadius: 2 },
-  // Energy bar — taller, colour-coded
-  energyTrack:    { height: 6, backgroundColor: colors.surface3, borderRadius: 3, overflow: 'hidden' },
-  energyFill:     { height: '100%', borderRadius: 3 },
+  barLabel:       { fontSize: 10, fontWeight: '700', color: colors.textMuted, letterSpacing: 0.6, textTransform: 'uppercase' },
+  barValueText:   { fontSize: 13, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  barValueMax:    { color: colors.textMuted, fontWeight: '400', fontSize: 10 },
+  energyTrack:    { height: 14, backgroundColor: colors.surface3, borderRadius: 7, overflow: 'hidden' },
+  energyFill:     { height: '100%', borderRadius: 7, justifyContent: 'center', paddingLeft: 8 },
+  energyPct:      { fontSize: 9, fontWeight: '700', color: 'rgba(255,255,255,0.7)', lineHeight: 14 },
   summaryText:  { fontSize: 10, color: colors.textMuted },
 
   // Date nav
-  dateNav:      { flexDirection: 'row', alignItems: 'center', padding: 10, paddingHorizontal: 14, backgroundColor: colors.surface2, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 8 },
-  dateNavBtn:   { width: 28, height: 28, borderRadius: 6, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
-  dateNavArrow: { fontSize: 16, color: colors.textMuted },
-  dateLabel:    { flex: 1, textAlign: 'center', fontSize: 12, fontWeight: '600', color: colors.text, letterSpacing: 0.3 },
-  todayPill:    { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 4, backgroundColor: colors.accentDim, borderWidth: 1, borderColor: colors.accent },
-  todayPillText:{ fontSize: 10, fontWeight: '700', color: colors.accent },
+  dateNav:       { flexDirection: 'row', alignItems: 'center', paddingVertical: 9, paddingHorizontal: 14, backgroundColor: colors.surface2, borderBottomWidth: 1, borderBottomColor: colors.border },
+  dateNavBtn:    { width: 32, height: 32, borderRadius: 6, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  dateNavArrow:  { fontSize: 18, color: colors.textMuted },
+  dateLabelBtn:  { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  dateLabel:     { fontSize: 12, fontWeight: '600', color: colors.text, letterSpacing: 0.3 },
+  dateLabelPast: { color: colors.textMuted },
 
   // List header
   listHeader:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.border },
