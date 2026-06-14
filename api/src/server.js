@@ -423,7 +423,8 @@ app.get('/lookup', async (req, res) => {
 
     const { readFileSync } = await import('fs')
     const { join }         = await import('path')
-    const file  = join(process.cwd(), '../../config/users.json')
+    // __dirname = api/src — go up to repo root, then into config/
+    const file  = join(__dirname, '../../config/users.json')
     const users = JSON.parse(readFileSync(file, 'utf8'))
     const found = users.find(u => u.googleUid === uid)
 
