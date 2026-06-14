@@ -415,6 +415,36 @@ app.post('/setup/embed', async (req, res) => {
   }
 })
 
+// Server-side health check proxy — avoids browser extensions (Brave shields etc.)
+// blocking cross-origin onrender.com → onrender.com requests
+app.get('/check-health', async (req, res) => {
+  try {
+    const { url } = req.query
+    if (!url) return res.status(400).json({ error: 'url required' })
+    const target = url.replace(/\/$/, '')
+
+    if (!/^https:\/\/[a-z0-9-]+\.onrender\.com$/i.test(target)) {
+      return res.status(400).json({ error: 'Invalid URL format' })
+    }
+
+    const attempts = [10000, 20000, 30000]
+    for (let i = 0; i < attempts.length; i++) {
+      try {
+        const r = await fetch(`${target}/health`, { signal: AbortSignal.timeout(attempts[i]) })
+        if (r.ok) {
+          const data = await r.json()
+          return res.json({ ok: true, data })
+        }
+      } catch (_) {
+        if (i < attempts.length - 1) await new Promise(r => setTimeout(r, 1500))
+      }
+    }
+    res.status(502).json({ ok: false, error: 'Server did not respond — it may still be starting up' })
+  } catch (e) {
+    res.status(500).json({ error: e.message })
+  }
+})
+
 // UID lookup — returning user skips wizard
 app.get('/lookup', async (req, res) => {
   try {

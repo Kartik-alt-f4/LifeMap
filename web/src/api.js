@@ -60,21 +60,21 @@ export function clearStoredConfig() {
 // Health check — used by setup wizard to validate Render URL
 export async function checkHealth(renderUrl, onRetry) {
   const url = renderUrl.replace(/\/$/, '')
-  const attempts = [10000, 30000, 45000] // progressively longer for cold starts
+  // Route through your server (server-to-server) to avoid browser extensions
+  // (Brave Shields etc.) blocking cross-origin onrender.com requests
+  const PROXY_BASE = 'https://lifemap-b0ms.onrender.com'
 
-  let lastError
-  for (let i = 0; i < attempts.length; i++) {
-    try {
-      if (i > 0) onRetry?.(i)
-      const res = await fetch(`${url}/health`, { signal: AbortSignal.timeout(attempts[i]) })
-      if (!res.ok) throw new Error(`Health check failed: ${res.status}`)
-      return await res.json()
-    } catch (e) {
-      lastError = e
-      if (i < attempts.length - 1) await new Promise(r => setTimeout(r, 2000))
-    }
+  onRetry?.(0) // show "checking" state immediately — proxy can take a while on cold start
+
+  const res = await fetch(`${PROXY_BASE}/check-health?url=${encodeURIComponent(url)}`, {
+    signal: AbortSignal.timeout(70000), // proxy itself retries internally up to ~60s
+  })
+  const data = await res.json().catch(() => ({}))
+
+  if (!res.ok || !data.ok) {
+    throw new Error(data.error || 'Could not reach server. It may still be starting up — wait a minute and try again.')
   }
-  throw new Error('Could not reach server. It may still be starting up — wait a minute and try again.')
+  return data.data
 }
 
 export const getConfig    = ()      => req('/config')
