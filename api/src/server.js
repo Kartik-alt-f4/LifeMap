@@ -421,11 +421,13 @@ app.get('/lookup', async (req, res) => {
     const { uid } = req.query
     if (!uid) return res.status(400).json({ error: 'uid required' })
 
-    const { readFileSync } = await import('fs')
-    const { join }         = await import('path')
-    // __dirname = api/src — go up to repo root, then into config/
-    const file  = join(__dirname, '../../config/users.json')
-    const users = JSON.parse(readFileSync(file, 'utf8'))
+    const repo = process.env.GITHUB_REPO
+    const ghRes = await fetch(
+      `https://raw.githubusercontent.com/${repo}/main/config/users.json`,
+      { headers: { 'Cache-Control': 'no-cache' } }
+    )
+    if (!ghRes.ok) throw new Error(`GitHub fetch failed: ${ghRes.status}`)
+    const users = await ghRes.json()
     const found = users.find(u => u.googleUid === uid)
 
     if (found) return res.json({ found: true, renderUrl: found.url, name: found.name })
