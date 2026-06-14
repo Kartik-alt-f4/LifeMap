@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { getState, getConfig, getStoredConfig } from './api.js'
+import { getState, getConfig, getStoredConfig, saveStoredConfig } from './api.js'
 import Navbar        from './components/Navbar.jsx'
 import Dashboard     from './pages/Dashboard.jsx'
 import Skills        from './pages/Skills.jsx'
@@ -60,8 +60,26 @@ export default function App() {
   const [config,      setConfig]      = useState(null)
   const [isMobile,    setIsMobile]    = useState(false)
 
-  // Check for stored config on mount
+  // Check for stored config on mount — also catch config passed via URL
+  // after a redirect from the setup wizard on another domain
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const fromUrl = params.get('setup_config')
+
+    if (fromUrl) {
+      try {
+        const config = JSON.parse(fromUrl)
+        saveStoredConfig(config)
+        // Clean the URL so the config doesn't linger in browser history
+        window.history.replaceState({}, '', window.location.pathname)
+        setHasConfig(true)
+        setReady(true)
+        return
+      } catch (e) {
+        console.error('[setup] Failed to parse setup_config param:', e)
+      }
+    }
+
     const stored = getStoredConfig()
     setHasConfig(!!stored)
     setReady(true)

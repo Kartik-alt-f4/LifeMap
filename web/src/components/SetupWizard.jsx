@@ -610,6 +610,23 @@ export default function SetupWizard({ onComplete }) {
       name:      d.name,
     }
     saveStoredConfig(config)
+
+    // If this is a NEW setup (not a returning user already on their own domain),
+    // and their renderUrl differs from where this wizard is running,
+    // redirect them to their own server with config passed via URL params
+    // so it can be restored there without re-running the wizard.
+    const currentOrigin = window.location.origin
+    let targetOrigin = null
+    try { targetOrigin = new URL(d.renderUrl).origin } catch (_) {}
+
+    if (targetOrigin && targetOrigin !== currentOrigin && !d.returning) {
+      const params = new URLSearchParams({
+        setup_config: JSON.stringify(config),
+      })
+      window.location.href = `${targetOrigin}/?${params.toString()}`
+      return
+    }
+
     onComplete(config)
   }
 
