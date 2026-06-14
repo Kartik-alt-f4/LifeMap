@@ -70,8 +70,10 @@ async function lookupUser(googleUid) {
 }
 
 async function registerWithServer(renderUrl, name, googleUid) {
-  const url = renderUrl.replace(/\/$/, '')
-  const res = await fetch(`${url}/register`, {
+  // Always register against YOUR server (b0ms) — it owns users.json via GitHub API.
+  // renderUrl here is the NEW friend's URL being registered, not the call target.
+  const BASE = 'https://lifemap-b0ms.onrender.com'
+  const res = await fetch(`${BASE}/register`, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
     body:    JSON.stringify({ renderUrl, name, googleUid }),
@@ -752,4 +754,4 @@ const s = {
     background: 'none', border: 'none', cursor: 'pointer',
     textDecoration: 'underline',
   },
-} 
+}
