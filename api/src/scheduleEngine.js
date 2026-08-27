@@ -168,12 +168,15 @@ export function validateActions(actions) {
       continue
     }
 
-    if (action.type === 'create_task' || action.type === 'create_template') {
+    if (action.type === 'create_task' || action.type === 'create_template' || action.type === 'log_task') {
       if (!action.title)     errors.push(`${action.type}: missing title`)
       if (!action.task_type) errors.push(`${action.type}: missing task_type`)
       const validTypes = getGame().tasks.types
       if (action.task_type && !validTypes.includes(action.task_type)) {
         errors.push(`${action.type}: invalid task_type '${action.task_type}'`)
+      }
+      if (action.priority && !PRIORITY_FIELD_ORDER.includes(action.priority)) {
+        errors.push(`${action.type}: invalid priority '${action.priority}'`)
       }
     }
 

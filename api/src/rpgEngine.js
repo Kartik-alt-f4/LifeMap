@@ -119,6 +119,21 @@ export function calculateCompletion(task, player) {
   }
 }
 
+// ── Retroactive completion for a genuine past day (log_task, when != today) ───
+// No streak multiplier (today's live streak has no business being applied to
+// a task claimed for another day — see migrations/008_retro_task_completion.sql)
+// and no energy drain (energy is current capacity, not something a past
+// action can retroactively cost).
+export function calculateRetroCompletion(task, player) {
+  const { xp, gold } = computeTaskRewards(task)
+  const { newLevel, newXp, newXpToNext } = computeNewLevel(
+    player.level, player.current_xp, xp
+  )
+  const leveledUp = newLevel > player.level
+
+  return { xp, gold, newLevel, newXp, newXpToNext, leveledUp }
+}
+
 // ── Rank lookup ───────────────────────────────────────────────────────────────
 export function getRank(level) {
   const ranks = getGame().ranks || []

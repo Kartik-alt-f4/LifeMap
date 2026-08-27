@@ -338,6 +338,32 @@ export async function completeTask(taskId, calc) {
   return data
 }
 
+// ── Retroactive completion for a genuine past day ─────────────────────────────
+// Creates the task dated for that day AND marks it completed, atomically, in
+// one RPC — see log_past_task() in functions.sql for why this is a separate
+// function from complete_task rather than createTask()+completeTask().
+export async function logPastTask(fields, calc) {
+  const { data, error } = await supabase.rpc('log_past_task', {
+    p_title:          fields.title,
+    p_task_type:      fields.task_type,
+    p_priority:       fields.priority,
+    p_difficulty:     fields.difficulty,
+    p_time_block:     fields.time_block,
+    p_scheduled_for:  fields.scheduled_for,
+    p_completed_at:   estNaiveToUTC(fields.completed_at),
+    p_is_recovery:    fields.is_recovery,
+    p_xp_gained:      calc.xp,
+    p_gold_gained:    calc.gold,
+    p_new_level:      calc.newLevel,
+    p_new_xp:         calc.newXp,
+    p_new_xp_to_next: calc.newXpToNext,
+    p_leveled_up:     calc.leveledUp
+  })
+  if (error) throw error
+  if (!data) throw new Error('log_past_task returned null')
+  return data
+}
+
 // ── Templates ─────────────────────────────────────────────────────────────────
 export async function getTemplates() {
   const { data, error } = await supabase

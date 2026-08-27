@@ -3,13 +3,19 @@
 
 import {
   createTask, createTemplate, spawnTodayInstance, completeTask, skipTask, cancelTask,
-  moveTask, editTask, getTasksForDate, generateDescription, createShopItem, logLeisure
+  moveTask, editTask, getTasksForDate, generateDescription, createShopItem, logLeisure,
+  logPastTask
 } from './dbAgent.js'
-import { calculateCompletion } from './rpgEngine.js'
+import { calculateCompletion, calculateRetroCompletion } from './rpgEngine.js'
 import { projectTask } from './projectionEngine.js'
-import { todayEST } from './dateUtils.js'
+import { todayEST, addDays } from './dateUtils.js'
 import { renderTemplate } from './scheduleEngine.js'
 import { getAgent } from './configLoader.js'
+
+// log_task has no time_block yet at the point we need a plausible clock time
+// for the backdated completed_at — mid-point of the block it's known for. Not
+// user-facing, just keeps the xp/gold ledger timestamps roughly honest.
+const BLOCK_MIDPOINT_HOUR = { morning: 9, noon: 13, evening: 16, night: 21, midnight: 0 }
 
 // The model writes its reply before any action runs, so it can't know a
 // scheduling conflict actually happened. If createTask() resolved one, build
@@ -124,6 +130,68 @@ export async function executeActions(actions, playerState, userMessage = null) {
           projectTask(action.task_id).catch(e =>
             console.error(`[projection] task ${action.task_id} failed:`, e)
           )
+          break
+        }
+
+        case 'log_task': {
+          // Retroactive journaling — "I already went to the gym", possibly said
+          // hours after the fact. Resolve which calendar day it actually
+          // happened: default today (the common case — logging today's stuff
+          // late), or a genuine past day within a bounded window.
+          let targetDate = today
+          if (action.when && action.when !== 'today') {
+            targetDate = action.when === 'yesterday' ? addDays(today, -1) : action.when
+          }
+          const earliestAllowed = addDays(today, -3)
+          if (targetDate > today || targetDate < earliestAllowed) {
+            throw new Error(`log_task: date ${targetDate} is outside the allowed range (${earliestAllowed} to ${today})`)
+          }
+
+          if (targetDate === today) {
+            // Genuinely today — same rewards as a normal complete_task, just
+            // created and completed in the same turn instead of two.
+            const created = await createTask({
+              title:         action.title,
+              task_type:     action.task_type,
+              priority:      action.priority   ?? 'P2',
+              difficulty:    action.difficulty ?? 'medium',
+              time_block:    action.time_block ?? null,
+              scheduled_for: today,
+              is_recovery:   action.is_recovery ?? false
+            })
+            const playerForCalc = {
+              level:      playerState.level      ?? 1,
+              current_xp: playerState.current_xp ?? 0,
+              xp_to_next: playerState.xp_to_next ?? 100,
+              streak:     { day_streak: playerState.streak ?? 0 }
+            }
+            const calc = calculateCompletion(created, playerForCalc)
+            result     = await completeTask(created.id, calc)
+            projectTask(created.id).catch(e =>
+              console.error(`[projection] task ${created.id} failed:`, e)
+            )
+          } else {
+            // A genuine past day — flat rewards only, no streak multiplier, no
+            // energy drain, no streak/mandatory_met mutation. See
+            // calculateRetroCompletion() and log_past_task() for why.
+            const playerForCalc = { level: playerState.level ?? 1, current_xp: playerState.current_xp ?? 0 }
+            const calc = calculateRetroCompletion(
+              { task_type: action.task_type, difficulty: action.difficulty ?? 'medium' },
+              playerForCalc
+            )
+            const hour = BLOCK_MIDPOINT_HOUR[action.time_block] ?? 12
+            const completedAt = `${targetDate}T${String(hour).padStart(2,'0')}:00:00`
+            result = await logPastTask({
+              title:         action.title,
+              task_type:     action.task_type,
+              priority:      action.priority   ?? 'P2',
+              difficulty:    action.difficulty ?? 'medium',
+              time_block:    action.time_block ?? null,
+              scheduled_for: targetDate,
+              completed_at:  completedAt,
+              is_recovery:   action.is_recovery ?? false
+            }, calc)
+          }
           break
         }
 

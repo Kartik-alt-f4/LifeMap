@@ -104,19 +104,25 @@ export async function runAgent(userMessage, sessionHistory, playerState, dateStr
   const validationErrors = validateActions(parsed.actions || [])
   if (validationErrors.length) {
     console.warn('[agent] action validation warnings:', validationErrors)
-    // Attempt to auto-correct common issues rather than rejecting
-    const corrected = (parsed.actions || []).map(action => {
-      if ((action.type === 'create_task' || action.type === 'create_template') && action.task_type) {
+  }
+
+  // Auto-correct common issues rather than letting them hit the DB's CHECK
+  // constraints as a hard per-action failure — runs regardless of whether
+  // validateActions flagged anything, since it doesn't check priority.
+  parsed.actions = (parsed.actions || []).map(action => {
+    if ((action.type === 'create_task' || action.type === 'create_template' || action.type === 'log_task')) {
+      if (action.task_type) {
         // Normalise task_type casing
         const lower = action.task_type.toLowerCase()
-        const valid = ['anchor','mandatory','project','bonus','habit','routine']
-        if (!valid.includes(lower)) action.task_type = 'habit' // safe default
-        else action.task_type = lower
+        const validTypes = ['anchor','mandatory','project','bonus','habit','routine']
+        action.task_type = validTypes.includes(lower) ? lower : 'habit' // safe default
       }
-      return action
-    })
-    parsed.actions = corrected
-  }
+      if (action.priority && !['P0','P1','P2','P3'].includes(action.priority)) {
+        action.priority = 'P2' // safe default — matches DB column default
+      }
+    }
+    return action
+  })
 
   // If intent says edit but model returned create_task, flag it
   // Server will handle the conversion with task_id lookup
