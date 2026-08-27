@@ -965,6 +965,7 @@ a { color: inherit; text-decoration: none; }
     display: flex; align-items: center; justify-content: center;
     border: 3px solid var(--bg);
     box-shadow: 0 4px 16px rgba(123,110,246,0.45);
+    overflow: hidden;
   }
 
   /* ── MOBILE PROFILE ── */

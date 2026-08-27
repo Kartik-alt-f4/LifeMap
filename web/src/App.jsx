@@ -12,7 +12,7 @@ import MobileProfile from './components/MobileProfile.jsx'
 import SetupWizard   from './components/SetupWizard.jsx'
 
 function LifeMapLogo({ size = 22 }) {
-  return <img src="/favicon.svg" alt="" width={size} height={size * (329/252)} style={{ objectFit: 'contain' }} />
+  return <img src="/favicon.svg" alt="" style={{ width: size, height: size, objectFit: 'cover' }} />
 }
 
 function MobileBottomNav({ activeTab, onTab, onAdd }) {
@@ -27,7 +27,7 @@ function MobileBottomNav({ activeTab, onTab, onAdd }) {
         <span className="mob-tab-label">Chat</span>
       </button>
       <button className="mob-tab mob-fab" onClick={onAdd} aria-label="Add task">
-        <div className="mob-fab-circle"><LifeMapLogo size={30} /></div>
+        <div className="mob-fab-circle"><LifeMapLogo size={54} /></div>
       </button>
       <button className={`mob-tab${activeTab === 'shop'    ? ' active' : ''}`} onClick={() => onTab('shop')}>
         <span className="mob-tab-icon">◆</span>
