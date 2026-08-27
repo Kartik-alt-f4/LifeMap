@@ -8,11 +8,10 @@ import { setupSupabase, triggerEmbedSeed } from '../../scripts/setup-supabase.js
 
 import { loadConfig, getConfig, getServer, writeConfigSection } from './configLoader.js'
 import { todayEST } from './dateUtils.js'
-import { initGemini, runAgent }    from './agentPipeline.js'
+import { initGemini }    from './agentPipeline.js'
 import { initProjection, projectTask } from './projectionEngine.js'
 import { initDiscordBot }          from './discordBot.js'
-import { executeActions }          from './actionExecutor.js'
-import { getHistory, saveExchange, formatForGemini } from './sessionManager.js'
+import { handleChatMessage }       from './chatHandler.js'
 import { runMorning, runEod, runRemind, runCleanup, checkStreakWarning } from './cronJobs.js'
 import {
   getPlayerState, getTasksForDate, createTask, createTemplate, editTask,
@@ -188,43 +187,8 @@ app.post('/chat', async (req, res) => {
     const { message, session_id = 'web' } = req.body
     if (!message) return res.status(400).json({ error: 'message required' })
 
-    const today       = todayEST()
-    const [playerState, todayTasks] = await Promise.all([
-      getPlayerState(),
-      getTasksForDate(today)
-    ])
-    const { sessionId, messages } = await getHistory(session_id)
-    const history     = formatForGemini(messages)
-
-    const agentResult = await runAgent(message, history, playerState, today, todayTasks)
-
-    let actionResults = []
-    if (agentResult.actions?.length) {
-      actionResults = await executeActions(agentResult.actions, playerState, message)
-    }
-
-    const updatedPlayer = await getPlayerState()
-    const updatedTasks  = await getTasksForDate(today)
-
-    let finalReply = agentResult.reply
-    if (actionResults.length > 0) {
-      // The model wrote its reply before this action ran, so it can't know a
-      // scheduling conflict actually happened — override with the accurate
-      // message when createTask() resolved one (see actionExecutor.js).
-      const conflictResult = actionResults.find(r => r.success && r.conflictMessage)
-      if (conflictResult) {
-        finalReply = conflictResult.conflictMessage
-      } else {
-        const successActions = actionResults.filter(r => r.success)
-        if (successActions.length > 0 && !finalReply) {
-          finalReply = successActions.map(r => r.message).join('\n')
-        }
-      }
-    }
-
-    await saveExchange(sessionId, message, finalReply ?? '', agentResult.actions ?? [])
-
-    res.json({ reply: finalReply, actions: actionResults })
+    const result = await handleChatMessage(message, session_id)
+    res.json(result)
   } catch (e) {
     console.error('Chat error:', e.message)
     res.status(500).json({ error: e.message })

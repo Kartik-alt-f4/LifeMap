@@ -11,7 +11,7 @@ export async function getHistory(sessionKey) {
   return { sessionId, messages }
 }
 
-export async function saveExchange(sessionId, userMessage, modelReply) {
+export async function saveExchange(sessionId, userMessage, modelReply, actionResults = []) {
   const { max_messages, truncation_limit } = getServer().session
 
   // Get current max order_index
@@ -21,7 +21,8 @@ export async function saveExchange(sessionId, userMessage, modelReply) {
   const truncate = (s) => s.length > truncation_limit ? s.slice(0, truncation_limit) + '…' : s
 
   await appendMessage(sessionId, 'user',  truncate(userMessage), maxIdx + 1)
-  await appendMessage(sessionId, 'model', truncate(modelReply),  maxIdx + 2)
+  await appendMessage(sessionId, 'model', truncate(modelReply),  maxIdx + 2,
+    actionResults.length ? actionResults : null)
 
   // Prune if over limit
   await pruneOldMessages(sessionId, max_messages)

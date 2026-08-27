@@ -98,7 +98,7 @@ CREATE TABLE task (
   time_block        text
                     CHECK (time_block IN ('morning','noon','evening','night','midnight')),
   scheduled_for     date        NOT NULL DEFAULT CURRENT_DATE,
-  scheduled_at      timestamp,
+  scheduled_at      timestamptz,
   status            text        NOT NULL DEFAULT 'pending'
                     CHECK (status IN ('pending','active','completed','skipped','cancelled')),
   is_recovery       bool        NOT NULL DEFAULT false,
@@ -112,6 +112,10 @@ CREATE TABLE task (
   projection_status text        NOT NULL DEFAULT 'pending'
                     CHECK (projection_status IN ('pending','done','failed')),
   reminded_at       timestamptz,
+  -- Separate flag for the anchor/mandatory long-lead heads-up (~60-90 min
+  -- before scheduled_at) — distinct from reminded_at (the close, ~30 min
+  -- reminder) so a task can get both without either blocking the other.
+  early_reminded_at timestamptz,
   completed_at      timestamp,
   created_at        timestamp   NOT NULL DEFAULT now()
 );
@@ -305,6 +309,11 @@ CREATE TABLE conversation_message (
   order_index int       NOT NULL,
   role        text      NOT NULL CHECK (role IN ('user','model')),
   content     text      NOT NULL,
+  -- Executed action results (success/error/result) for a 'model' turn that
+  -- took actions — null for turns with none. Debug/audit trail; not currently
+  -- fed back into the model's own history (formatForGemini still uses content
+  -- only) — that's a separate design decision, not part of this fix.
+  actions     jsonb,
   created_at  timestamp NOT NULL DEFAULT now()
 );
 

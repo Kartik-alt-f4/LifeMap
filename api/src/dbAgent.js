@@ -2,7 +2,7 @@
 // No business logic here. Pure data access layer.
 
 import { supabase } from './supabaseClient.js'
-import { todayEST } from './dateUtils.js'
+import { todayEST, estNaiveToUTC } from './dateUtils.js'
 import { detectConflict, findAlternativeBlock } from './scheduleEngine.js'
 
 // ── Player state ──────────────────────────────────────────────────────────────
@@ -204,7 +204,7 @@ export async function createTask(fields) {
       difficulty:    fields.difficulty    ?? 'medium',
       time_block:    timeBlock,
       scheduled_for: scheduledFor,
-      scheduled_at:  fields.scheduled_at  ?? null,
+      scheduled_at:  fields.scheduled_at ? estNaiveToUTC(fields.scheduled_at) : null,
       is_recovery:   fields.is_recovery   ?? false
     })
     .select()
@@ -269,6 +269,7 @@ export async function editTask(taskId, fields) {
   const update = Object.fromEntries(
     Object.entries(fields).filter(([k]) => ALLOWED.includes(k))
   )
+  if (update.scheduled_at) update.scheduled_at = estNaiveToUTC(update.scheduled_at)
   if (!Object.keys(update).length) throw new Error('No valid fields to update')
 
   const { data, error } = await supabase
@@ -384,12 +385,26 @@ export async function createShopItem({ name, description, cost_gold, type }) {
       name:        name.trim(),
       description: description?.trim() ?? '',
       cost_gold:   parseInt(cost_gold) || 10,
-      type:        ['leisure','day_off'].includes(type) ? type : 'leisure',
+      type:        ['leisure','day_off','day_off_plus'].includes(type) ? type : 'leisure',
       active:      true
     })
     .select().single()
   if (error) throw error
   return data
+}
+
+// ── Active shop items, minimal shape — for the agent's [SHOP] context block ───
+// log_leisure and create_shop_item both need real shop_item ids to work with;
+// without this the model has no ground truth and has to invent an id from a
+// name alone.
+export async function getActiveShopItems() {
+  const { data, error } = await supabase
+    .from('shop_item')
+    .select('id, name, type, tracking_unit, cost_gold')
+    .eq('active', true)
+    .order('name')
+  if (error) throw error
+  return data || []
 }
 
 export async function getShopWithCounts() {
@@ -520,7 +535,7 @@ export async function getOrCreateSession(sessionKey) {
 export async function getSessionMessages(sessionId, limit) {
   const { data, error } = await supabase
     .from('conversation_message')
-    .select('role, content, order_index')
+    .select('role, content, order_index, actions')
     .eq('session_id', sessionId)
     .order('order_index', { ascending: true })
     .limit(limit)
@@ -528,10 +543,10 @@ export async function getSessionMessages(sessionId, limit) {
   return data || []
 }
 
-export async function appendMessage(sessionId, role, content, orderIndex) {
+export async function appendMessage(sessionId, role, content, orderIndex, actions = null) {
   const { error } = await supabase
     .from('conversation_message')
-    .insert({ session_id: sessionId, role, content, order_index: orderIndex })
+    .insert({ session_id: sessionId, role, content, order_index: orderIndex, actions })
   if (error) throw error
 }
 

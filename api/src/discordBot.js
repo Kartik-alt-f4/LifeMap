@@ -1,43 +1,82 @@
-// api/src/discordBot.js — replace with this version
-// Discord is optional — if DISCORD_TOKEN or DISCORD_CHANNEL_ID is missing,
-// all calls silently no-op. Friends without Discord still get push notifications.
+// discordBot.js — two-way Discord integration.
+//
+// Outbound (cron notifications — morning briefing, EOD summary, reminders,
+// streak warnings): posts via DISCORD_WEBHOOK_URL. Independent of the gateway
+// bot's login state — works even if the bot below never connects.
+//
+// Inbound (chat): the gateway bot (DISCORD_BOT_TOKEN + DISCORD_CHANNEL_ID)
+// listens for messages in that one channel and runs them through the exact
+// same chat pipeline as the web app (chatHandler.js) — message the bot like
+// you'd use the web chat.
+//
+// Both DISCORD_BOT_TOKEN and DISCORD_WEBHOOK_URL are optional and independent
+// — either, both, or neither can be configured.
 
 import { Client, GatewayIntentBits } from 'discord.js'
+import { handleChatMessage } from './chatHandler.js'
 
-let client  = null
-let channel = null
-let ready   = false
+const DISCORD_SESSION_KEY = 'discord_chat'
 
-const DISCORD_ENABLED = !!(process.env.DISCORD_TOKEN && process.env.DISCORD_CHANNEL_ID)
+// ── Outbound — webhook ─────────────────────────────────────────────────────────
+export async function postToDiscord(message) {
+  const webhookUrl = process.env.DISCORD_WEBHOOK_URL
+  if (!webhookUrl) return
 
+  try {
+    const res = await fetch(webhookUrl, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ content: message })
+    })
+    if (!res.ok) console.error(`[discord] webhook failed: ${res.status} ${res.statusText}`)
+  } catch (err) {
+    console.error('[discord] webhook error:', err.message)
+  }
+}
+
+// ── Inbound — gateway bot ──────────────────────────────────────────────────────
 export function initDiscordBot() {
-  if (!DISCORD_ENABLED) {
-    console.log('[discord] Disabled — DISCORD_TOKEN or DISCORD_CHANNEL_ID not set')
+  const token     = process.env.DISCORD_BOT_TOKEN
+  const channelId = process.env.DISCORD_CHANNEL_ID
+
+  if (!token || !channelId) {
+    console.log('[discord] DISCORD_BOT_TOKEN or DISCORD_CHANNEL_ID not set — inbound chat disabled')
     return
   }
 
-  client = new Client({ intents: [GatewayIntentBits.Guilds] })
+  const client = new Client({
+    intents: [
+      GatewayIntentBits.Guilds,
+      GatewayIntentBits.GuildMessages,
+      GatewayIntentBits.MessageContent
+    ]
+  })
 
-  client.once('ready', async () => {
+  // discord.js v14.26 emits 'clientReady' — 'ready' is deprecated and never
+  // fires on this version.
+  client.once('clientReady', (readyClient) => {
+    console.log(`[discord] Connected: ${readyClient.user.tag} — watching channel ${channelId}`)
+  })
+
+  client.on('messageCreate', async (message) => {
+    if (message.author.bot) return
+    if (message.channel.id !== channelId) return
+
+    const userText = message.content.trim()
+    if (!userText) return
+
+    await message.channel.sendTyping().catch(() => {})
+
     try {
-      channel = await client.channels.fetch(process.env.DISCORD_CHANNEL_ID)
-      ready   = true
-      console.log('[discord] Connected:', client.user.tag)
-    } catch (e) {
-      console.error('[discord] Channel fetch failed:', e.message)
+      const { reply } = await handleChatMessage(userText, DISCORD_SESSION_KEY)
+      await message.reply(reply || 'Done.')
+    } catch (err) {
+      console.error('[discord] chat error:', err.message)
+      await message.reply(`⚠ Error: ${err.message}`).catch(() => {})
     }
   })
 
-  client.login(process.env.DISCORD_TOKEN).catch(e => {
-    console.error('[discord] Login failed:', e.message)
+  client.login(token).catch(err => {
+    console.error('[discord] Login failed:', err.message)
   })
-}
-
-export async function postToDiscord(message) {
-  if (!DISCORD_ENABLED || !ready || !channel) return
-  try {
-    await channel.send(message)
-  } catch (e) {
-    console.error('[discord] Send failed:', e.message)
-  }
 }

@@ -243,35 +243,67 @@ export async function runEod() {
 }
 
 // ── REMIND ────────────────────────────────────────────────────────────────────
-export async function runRemind() {
-  const cfg         = getServer().notifications
-  const minutesBefore = cfg.remind_minutes_before
-  const now         = new Date()
-  const windowEnd   = new Date(now.getTime() + minutesBefore * 60 * 1000).toISOString()
-  const nowIso      = now.toISOString()
+// Sends any pending task's reminder(s) whose scheduled_at falls inside a given
+// [windowStartMin, windowEndMin) minutes-from-now band, once per task per
+// flagColumn — used for both the close reminder and the anchor/mandatory
+// long-lead heads-up below, which run independently of each other.
+const REMIND_ICONS = { anchor: '⚓', mandatory: '⚔', habit: '🔄' }
+
+async function sendWindowReminders({ windowStartMin, windowEndMin, taskTypes, flagColumn, formatMessage, pushTitle }) {
+  const now        = new Date()
+  const nowIso     = now.toISOString()
+  const rangeStart = new Date(now.getTime() + windowStartMin * 60 * 1000).toISOString()
+  const rangeEnd   = new Date(now.getTime() + windowEndMin   * 60 * 1000).toISOString()
 
   const { data: upcoming } = await supabase
     .from('task')
     .select('id, title, task_type, priority, scheduled_at')
     .eq('status', 'pending')
-    .in('task_type', ['anchor', 'mandatory', 'habit'])
+    .in('task_type', taskTypes)
     .not('scheduled_at', 'is', null)
-    .gte('scheduled_at', nowIso)
-    .lte('scheduled_at', windowEnd)
-    .is('reminded_at', null)
+    .gte('scheduled_at', rangeStart)
+    .lte('scheduled_at', rangeEnd)
+    .is(flagColumn, null)
 
   for (const task of upcoming || []) {
     const minsAway = Math.round((new Date(task.scheduled_at) - now) / 60000)
-    const icons    = { anchor: '⚓', mandatory: '⚔', habit: '🔄' }
-    const icon     = icons[task.task_type] ?? '📌'
-    const msg      = `${icon} **${task.title}** — in ${minsAway} min`
+    const msg      = formatMessage(task, minsAway)
 
     await postToDiscord(msg)
-    await sendPush('Upcoming task', `${task.title} in ${minsAway} min`)
-    await supabase.from('task').update({ reminded_at: nowIso }).eq('id', task.id)
+    await sendPush(pushTitle, `${task.title} in ${minsAway} min`)
+    await supabase.from('task').update({ [flagColumn]: nowIso }).eq('id', task.id)
   }
 
-  return { notified: (upcoming || []).length }
+  return (upcoming || []).length
+}
+
+export async function runRemind() {
+  const cfg = getServer().notifications
+
+  const notified = await sendWindowReminders({
+    windowStartMin: 0,
+    windowEndMin:   cfg.remind_minutes_before,
+    taskTypes:      ['anchor', 'mandatory', 'habit'],
+    flagColumn:     'reminded_at',
+    pushTitle:      'Upcoming task',
+    formatMessage:  (task, minsAway) =>
+      `${REMIND_ICONS[task.task_type] ?? '📌'} **${task.title}** — in ${minsAway} min`
+  })
+
+  // Long-lead heads-up for anchor/mandatory specifically — fires once, roughly
+  // early_remind_window_start_min to early_remind_window_end_min minutes out
+  // (default ~90 to ~60), independent of the close reminder above.
+  const earlyNotified = await sendWindowReminders({
+    windowStartMin: cfg.early_remind_window_end_min,
+    windowEndMin:   cfg.early_remind_window_start_min,
+    taskTypes:      cfg.early_remind_task_types,
+    flagColumn:     'early_reminded_at',
+    pushTitle:      'Heads up',
+    formatMessage:  (task, minsAway) =>
+      `⏰ Heads up: ${REMIND_ICONS[task.task_type] ?? '📌'} **${task.title}** — in ${Math.round(minsAway / 6) / 10}h`
+  })
+
+  return { notified, earlyNotified }
 }
 
 // ── CLEANUP ───────────────────────────────────────────────────────────────────

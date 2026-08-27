@@ -30,6 +30,9 @@
 
   "notifications": {
     "remind_minutes_before": 30,
+    "early_remind_task_types":       ["anchor", "mandatory"],
+    "early_remind_window_start_min": 90,
+    "early_remind_window_end_min":   60,
     "morning_briefing":      true,
     "eod_summary":           true,
     "streak_warning":        true,

@@ -14,7 +14,7 @@ export function initGemini() {
 
 // ── Main entry point ──────────────────────────────────────────────────────────
 // Returns: { reply, actions, needsClarification, clarificationQuestion }
-export async function runAgent(userMessage, sessionHistory, playerState, dateStr, todayTasks = []) {
+export async function runAgent(userMessage, sessionHistory, playerState, dateStr, todayTasks = [], shopItems = []) {
   const systemPrompt = buildSystemPrompt()
   const model = _genAI.getGenerativeModel({
     model: getServer().model.name,
@@ -44,7 +44,7 @@ export async function runAgent(userMessage, sessionHistory, playerState, dateStr
   const tomorrowDate  = tomorrowEST()
   const timeStr  = now.toLocaleString('en-US', { timeZone: 'America/New_York', hour:'2-digit', minute:'2-digit', hour12:true })
 
-  const stateCtx = `\n\n[STATE]\nLv${playerState.level} | ⚡${playerState.energy.current}/${playerState.energy.max} | 🔥${playerState.streak} | ◆${playerState.available_gold}g\nDATE: ${todayDate} | TIME: ${timeStr} EST | TOMORROW: ${tomorrowDate}\n[/STATE]`
+  const stateCtx = `\n\n[STATE]\nLv${playerState.level} (${playerState.current_xp}/${playerState.xp_to_next} XP) | ⚡${playerState.energy.current}/${playerState.energy.max} | 🔥${playerState.streak} | ◆${playerState.available_gold}g\nDATE: ${todayDate} | TIME: ${timeStr} EST | TOMORROW: ${tomorrowDate}\n[/STATE]`
 
   // Inject today's tasks so agent can find task IDs for edit/complete/skip/cancel
   let tasksCtx = ''
@@ -55,7 +55,17 @@ export async function runAgent(userMessage, sessionHistory, playerState, dateStr
     tasksCtx = `\n\n[TODAY_TASKS]\n${taskLines}\n[/TODAY_TASKS]`
   }
 
-  const fullMessage = userMessage + stateCtx + scheduleCtx + tasksCtx
+  // Inject the real shop list so log_leisure/create_shop_item have actual ids
+  // to work with instead of inventing a shop_item_id from a name alone.
+  let shopCtx = ''
+  if (shopItems && shopItems.length > 0) {
+    const shopLines = shopItems
+      .map(s => `  id:${s.id} "${s.name}" ${s.type} ${s.tracking_unit} ${s.cost_gold}g`)
+      .join('\n')
+    shopCtx = `\n\n[SHOP]\n${shopLines}\n[/SHOP]`
+  }
+
+  const fullMessage = userMessage + stateCtx + scheduleCtx + tasksCtx + shopCtx
 
   // Trim history to config limit
   const { max_messages, truncation_limit } = getServer().session

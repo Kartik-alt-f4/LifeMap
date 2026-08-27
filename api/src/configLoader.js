@@ -58,6 +58,11 @@ RULES (follow strictly):
 - Use TODAY_TASKS task IDs for edits/completions/skips.
 - For edits: use edit_task with task_id from TODAY_TASKS and only changed fields.
 - DATE: always use the DATE/TOMORROW values from [STATE]. Never guess dates.
+- SHOP: for log_leisure, always take shop_item_id from the [SHOP] list by matching the item
+  name to what the user described. Never invent a shop_item_id. If nothing in [SHOP] matches,
+  use create_shop_item first (do not guess an id for an item that doesn't exist yet).
+- Any question about today's tasks ("task list", "what's due", "what do I have today") must
+  name the actual tasks from TODAY_TASKS with their status — never reply with just a bare count.
 
 XP REWARDS: ${JSON.stringify(taskCfg.xp_base)}
 GOLD REWARDS (base by type): ${JSON.stringify(taskCfg.gold_base)}
@@ -103,9 +108,9 @@ EXAMPLES:
   "gym every weekday morning"            -> create_task, habit, recurrence:"weekdays", time_block:"morning"
   "add shop item Netflix 10 gold"   -> create_shop_item, name:"Netflix Evening", cost_gold:10, item_type:"leisure"
   "add day off to shop for 30 gold" -> create_shop_item, name:"Day Off", cost_gold:30, item_type:"day_off"
-  "smoked 3 today"                  -> log_leisure, infer shop_item_id from leisure items matching "smoke/cigarette", quantity:3, unit:"count"
-  "gamed for 90 minutes"            -> log_leisure, infer shop_item_id from items matching "gaming", quantity:90, unit:"minutes"
-  "watched 2 episodes"              -> log_leisure, infer shop_item_id from items matching "show/watch", quantity:2, unit:"count" 
+  "smoked 3 today"                  -> log_leisure, shop_item_id from [SHOP] matching "smoke/cigarette", quantity:3, unit:"count"
+  "gamed for 90 minutes"            -> log_leisure, shop_item_id from [SHOP] matching "gaming", quantity:90, unit:"minutes"
+  "watched 2 episodes"              -> log_leisure, shop_item_id from [SHOP] matching "show/watch", quantity:2, unit:"count"
 
 REPLY TEMPLATES (use exact format):
   added:     "Added {title} ({type}, {time_block})."
@@ -114,7 +119,7 @@ REPLY TEMPLATES (use exact format):
   skipped:   "{title} skipped."
   cancelled: "{title} cancelled."
   duplicate: "{existing_title} already exists. Edit it instead?"
-  list:      "Today: {pending} pending, {done} done."
+  list:      "Today: {task title} ({status}), {task title} ({status})... — {pending} pending, {done} done."
 
 OUTPUT: valid JSON only. No markdown. No text outside the JSON.
 
@@ -134,7 +139,7 @@ Action schemas:
   cancel_task:  { type, task_id }
   move_task:    { type, task_id, new_time_block }
   create_shop_item: { type, name, description, cost_gold, item_type }  // item_type: "leisure", "day_off", "day_off_plus"
-  log_leisure:      { type, shop_item_id, quantity, unit, notes }  // unit: count|minutes|boolean. Infer shop_item_id from leisure item name.
+  log_leisure:      { type, shop_item_id, quantity, unit, notes }  // unit: count|minutes|boolean. shop_item_id must come from [SHOP], never invented.
 }`
 }
 
