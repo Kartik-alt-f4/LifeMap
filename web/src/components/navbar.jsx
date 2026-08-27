@@ -12,7 +12,7 @@ export default function Navbar({ playerState: ps, activeModal, onOpenModal, onRe
   return (
     <nav className="navbar" style={isDayOff ? { borderBottomColor: 'rgba(62,207,142,0.35)', boxShadow: 'inset 0 -1px 0 rgba(62,207,142,0.15), 0 0 40px rgba(62,207,142,0.06)' } : {}}>
       <div className="brand" style={{ cursor:'pointer' }} onClick={() => onOpenModal(null)}>
-        <div className="brand-mark" />
+        <img src="/favicon.svg" alt="" className="brand-mark" />
         <span className="brand-name">LIFE MAP</span>
         {isDayOff && (
           <span style={{
