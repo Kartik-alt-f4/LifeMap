@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="240 139 252 329" width="320" height="420">
+  <defs>
+    <linearGradient id="line" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8b5cff"/>
+      <stop offset="55%" stop-color="#6b4dff"/>
+      <stop offset="100%" stop-color="#315dff"/>
+    </linearGradient>
+
+    <linearGradient id="fillLeft" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#17143b" stop-opacity=".72"/>
+      <stop offset="100%" stop-color="#080b20" stop-opacity=".35"/>
+    </linearGradient>
+
+    <linearGradient id="fillRight" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#11183c" stop-opacity=".62"/>
+      <stop offset="100%" stop-color="#07091b" stop-opacity=".30"/>
+    </linearGradient>
+
+    <linearGradient id="plate" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#0f1221"/>
+      <stop offset="100%" stop-color="#05070f"/>
+    </linearGradient>
+
+    <radialGradient id="ambient" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#7b6ef6" stop-opacity=".22"/>
+      <stop offset="100%" stop-color="#7b6ef6" stop-opacity="0"/>
+    </radialGradient>
+
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="1.5" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- The original sigil geometry is intentionally kept intact.
+       The cyberpunk treatment is only a surface layer. -->
+
+  <!-- Backing plate: keeps the mark legible on any page background -->
+  <rect x="240" y="139" width="252" height="329" rx="36"
+        fill="url(#plate)" stroke="rgba(139,120,255,0.22)" stroke-width="1"/>
+  <ellipse cx="366" cy="303" rx="130" ry="150" fill="url(#ambient)"/>
+
+  <!-- Very restrained dark containment -->
+  <path d="M394 218 L306 286 L309 391 L394 218 Z"
+        fill="url(#fillLeft)"/>
+  <path d="M410 218 L447 321 L386 411 L410 218 Z"
+        fill="url(#fillRight)"/>
+
+  <!-- Main sigil -->
+  <g fill="none"
+     stroke="url(#line)"
+     stroke-width="1.35"
+     stroke-linecap="round"
+     stroke-linejoin="round"
+     filter="url(#glow)">
+
+    <!-- left triangle -->
+    <path d="M394 218 L306 286 L309 391 Z"/>
+
+    <!-- right triangle -->
+    <path d="M410 218 L447 321 L386 411 Z"/>
+
+    <!-- diagonal into left triangle -->
+    <path d="M394 218 L309 391"/>
+
+    <!-- small triangle: preserved exactly as a structural element -->
+    <path d="M306 286 L285 300 L306 256 L306 286 Z"/>
+  </g>
+
+  <!-- Concentric upper node -->
+  <g fill="#050714" stroke="url(#line)" filter="url(#glow)">
+    <circle cx="404" cy="201" r="17" stroke-width="1.35"/>
+    <circle cx="404" cy="201" r="8" stroke-width="1.15"/>
+  </g>
+
+  <!-- Lower nodes -->
+  <g fill="#050714" stroke="url(#line)" stroke-width="1.25" filter="url(#glow)">
+    <circle cx="309" cy="397" r="6"/>
+    <circle cx="386" cy="417" r="6"/>
+  </g>
+</svg>
