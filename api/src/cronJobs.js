@@ -7,8 +7,8 @@ import {
   getPushToken, savePushToken, getPlayerState,
   getPendingTasksForDate, skipTask, carryTaskForward, applyTaskPenalty
 } from './dbAgent.js'
-import { getGame, getServer, getRank } from './configLoader.js'
-import { computeStreakMultiplier, computeTaskRewards, computeLevelPenalty } from './rpgEngine.js'
+import { getGame, getServer } from './configLoader.js'
+import { computeStreakMultiplier, computeTaskRewards, computeLevelPenalty, getRank } from './rpgEngine.js'
 import { addDays } from './dateUtils.js'
 
 // ── Push notification helper ──────────────────────────────────────────────────

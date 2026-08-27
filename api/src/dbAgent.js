@@ -459,7 +459,6 @@ export async function getCalendar(monthStr) {
     .from('task')
     .select('scheduled_for, completed_at, status, late_multiplier, task_type')
     .neq('task_type', 'routine')
-    .neq('status', 'cancelled')
     .gte('scheduled_for', start)
     .lt('scheduled_for', end)
 
@@ -473,6 +472,12 @@ export async function getCalendar(monthStr) {
     days[d].total++
     if (task.status === 'completed') days[d].completed++
     else if (task.status === 'skipped') days[d].skipped++
+    // 'pending' here means "not completed that day" — covers genuinely
+    // pending tasks (today/future) AND 'cancelled' ones, which is what an
+    // EOD-carried mandatory/project/habit/bonus task becomes on the day it
+    // was carried FROM (see cronJobs.js runEod()). Excluding 'cancelled'
+    // outright used to make every carried task invisible on the calendar for
+    // its original day — this is deliberately inclusive instead.
     else days[d].pending++
   }
   return days

@@ -143,12 +143,11 @@ Action schemas:
 }`
 }
 
-// ── Rank from level ───────────────────────────────────────────────────────────
-export function getRank(level) {
-  const ranks = getGame().player.ranks
-  const eligible = ranks.filter(r => r.level <= level)
-  return eligible.length ? eligible[eligible.length - 1].title : ranks[0].title
-}
+// Rank lookup lives in rpgEngine.js (single source of truth — was previously
+// duplicated here reading a second, shorter, differently-worded rank table in
+// game.json's player.ranks, so the in-app rank and the Discord morning
+// briefing's rank could disagree at the same level. cronJobs.js now imports
+// rpgEngine's getRank() directly.
 
 // ── Write a config section (used by settings page) ────────────────────────────
 export function writeConfigSection(file, section, value) {

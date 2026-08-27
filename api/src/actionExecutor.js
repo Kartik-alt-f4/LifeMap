@@ -139,9 +139,24 @@ export async function executeActions(actions, playerState, userMessage = null) {
           result = await moveTask(action.task_id, action.new_time_block)
           break
 
-        case 'edit_task':
-          result = await editTask(action.task_id, action.fields ?? {})
+        case 'edit_task': {
+          // When the model misclassifies an edit as a create, agentPipeline.js
+          // converts it to an edit_task with task_id:null and a _title_hint
+          // instead — resolve that to a real id here by matching against
+          // today's tasks (exact title match first, then substring).
+          let taskId = action.task_id
+          if (!taskId && action._title_hint) {
+            const todayTasksList = await getTasksForDate(today)
+            const hint  = action._title_hint.toLowerCase()
+            const match = todayTasksList.find(t => t.title.toLowerCase() === hint)
+              ?? todayTasksList.find(t => t.title.toLowerCase().includes(hint))
+            if (!match) throw new Error(`No task found matching "${action._title_hint}"`)
+            taskId = match.id
+          }
+          if (!taskId) throw new Error('edit_task: missing task_id')
+          result = await editTask(taskId, action.fields ?? {})
           break
+        }
 
         case 'log_leisure':
           result = await logLeisure(

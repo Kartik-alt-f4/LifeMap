@@ -8,37 +8,7 @@
       "decay_offset": 55,
       "level_0_xp": 50,
       "level_1_xp": 100
-    },
-    "ranks": [
-      {
-        "level": 1,
-        "title": "Hatchling"
-      },
-      {
-        "level": 5,
-        "title": "Early Bird"
-      },
-      {
-        "level": 10,
-        "title": "Getting a Hang of It"
-      },
-      {
-        "level": 20,
-        "title": "Showing Up"
-      },
-      {
-        "level": 30,
-        "title": "Half a Year In"
-      },
-      {
-        "level": 50,
-        "title": "Godlike"
-      },
-      {
-        "level": 100,
-        "title": "Young You is Proud"
-      }
-    ]
+    }
   },
   "tasks": {
     "types": [

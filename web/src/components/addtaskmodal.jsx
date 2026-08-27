@@ -6,6 +6,7 @@ const PRIORITIES   = ['P0','P1','P2','P3']
 const DIFFICULTIES = ['low','medium','high']
 const TIME_BLOCKS  = ['morning','noon','evening','night','midnight']
 const RECURRENCES  = ['daily','weekdays','weekends','weekly']
+const WEEKDAYS     = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'] // index = recurrence_day_of_week (0=Sun, matches Postgres DOW)
 
 function todayStr() { return new Date().toISOString().split('T')[0] }
 
@@ -17,6 +18,7 @@ export default function AddTaskModal({ config, onClose, onAdded }) {
   const [timeBlock,    setTimeBlock]   = useState('')
   const [isRecurring,  setRecurring]   = useState(false)
   const [recurrence,   setRecurrence]  = useState('daily')
+  const [recurDow,     setRecurDow]    = useState(new Date().getDay())
   const [isRecovery,   setRecovery]    = useState(false)
   const [useSchedule,  setUseSchedule] = useState(false)
   const [schedDate,    setSchedDate]   = useState(todayStr())
@@ -49,7 +51,11 @@ export default function AddTaskModal({ config, onClose, onAdded }) {
       }
 
       if (isRecurring) {
-        await createTemplate({ ...payload, recurrence_pattern: recurrence })
+        await createTemplate({
+          ...payload,
+          recurrence: recurrence,
+          recurrence_day_of_week: recurrence === 'weekly' ? recurDow : null
+        })
       } else {
         await createTask(payload)
       }
@@ -165,7 +171,7 @@ export default function AddTaskModal({ config, onClose, onAdded }) {
 
         <Toggle
           label="Recurring task"
-          hint="Spawns daily from a template"
+          hint="Spawns from a template on the schedule below"
           value={isRecurring}
           onChange={setRecurring}
         />
@@ -174,6 +180,17 @@ export default function AddTaskModal({ config, onClose, onAdded }) {
           <div className="at-field">
             <label className="at-label">Recurrence</label>
             <Seg options={RECURRENCES} value={recurrence} onChange={setRecurrence} />
+          </div>
+        )}
+
+        {isRecurring && recurrence === 'weekly' && (
+          <div className="at-field">
+            <label className="at-label">Day of week</label>
+            <Seg
+              options={WEEKDAYS}
+              value={WEEKDAYS[recurDow]}
+              onChange={d => setRecurDow(WEEKDAYS.indexOf(d))}
+            />
           </div>
         )}
 
