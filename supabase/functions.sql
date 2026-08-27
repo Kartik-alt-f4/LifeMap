@@ -69,8 +69,13 @@ BEGIN
   INSERT INTO gold_ledger (source_task_id, amount, direction, reason)
   VALUES (p_task_id, p_gold_gained, 'credit', 'task_completion');
 
-  -- 5. Mandatory check
-  IF v_task_type = 'mandatory' THEN
+  -- 5. Critical-task check — anchor ("fixed daily structure point") and
+  -- mandatory ("must happen today or the day fails") both represent a
+  -- non-negotiable commitment, so completing either satisfies the day's
+  -- streak condition. Column name stays mandatory_met to avoid a disruptive
+  -- rename across the JS codebase — its real meaning is now "a critical task
+  -- was completed today."
+  IF v_task_type IN ('mandatory', 'anchor') THEN
     UPDATE daily_state SET mandatory_met = true WHERE id = 1;
   END IF;
 
