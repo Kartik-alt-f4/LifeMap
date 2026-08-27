@@ -121,6 +121,60 @@ END;
 $$;
 
 
+-- ── apply_task_penalty() ─────────────────────────────────────────────────────
+-- Called by the EOD cron for an anchor or mandatory task that's still incomplete
+-- when the day closes. App computes the penalty amounts and the post-penalty
+-- level/XP (rpgEngine.computeLevelPenalty — floored at level 1 / 0 XP) before
+-- calling; this function just applies them atomically and records the ledgers.
+-- Gold is floored at 0 here, matching the XP floor already applied in JS.
+
+CREATE OR REPLACE FUNCTION apply_task_penalty(
+  p_task_id        integer,
+  p_xp_penalty     numeric,
+  p_gold_penalty   numeric,
+  p_new_level      integer,
+  p_new_xp         numeric,
+  p_new_xp_to_next numeric
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_gold_before integer;
+  v_gold_after  integer;
+BEGIN
+  SELECT available_gold INTO v_gold_before FROM player WHERE id = 1;
+  v_gold_after := GREATEST(0, COALESCE(v_gold_before, 0) - p_gold_penalty::int);
+
+  UPDATE player
+  SET current_xp     = COALESCE(p_new_xp, 0),
+      xp_to_next     = COALESCE(p_new_xp_to_next, 100),
+      current_level  = COALESCE(p_new_level, 1),
+      available_gold = v_gold_after
+  WHERE id = 1;
+
+  -- Negative amount records a loss — xp_ledger has no separate direction column
+  -- the way gold_ledger does, so sign carries the meaning here.
+  INSERT INTO xp_ledger (source_task_id, amount, target_type, target_id, streak_multiplier_applied, timestamp)
+  VALUES (p_task_id, -p_xp_penalty, 'player', NULL, 1.0, now());
+
+  INSERT INTO gold_ledger (source_task_id, amount, direction, reason)
+  VALUES (p_task_id, p_gold_penalty::int, 'debit', 'missed_task_penalty');
+
+  RETURN jsonb_build_object(
+    'task_id',      p_task_id,
+    'xp_penalty',   p_xp_penalty,
+    'gold_penalty', p_gold_penalty,
+    'gold_before',  v_gold_before,
+    'gold_after',   v_gold_after,
+    'new_level',    p_new_level
+  );
+EXCEPTION WHEN OTHERS THEN
+  RAISE;
+END;
+$$;
+
+
 -- ── buy_item() ────────────────────────────────────────────────────────────────
 -- Kept verbatim from v1 fn_buy_item.sql — logic is correct.
 -- Called by POST /buy/:id via supabase.rpc()
@@ -232,17 +286,24 @@ $$;
 -- ── roll_daily_state() ────────────────────────────────────────────────────────
 -- Called by EOD cron after snapshot is written.
 -- Advances date, resets flags, updates streak.
+-- p_new_date is passed explicitly (computed in JS as state.date + 1 day) rather
+-- than derived here as CURRENT_DATE + 1 — those two disagree whenever
+-- daily_state.date has drifted behind the real clock (e.g. cron missed a day or
+-- more), which silently stranded carried-forward tasks on a date that never
+-- became "today". See cronJobs.js runEod().
+DROP FUNCTION IF EXISTS roll_daily_state(integer, float);
 
 CREATE OR REPLACE FUNCTION roll_daily_state(
   p_new_streak      integer,
-  p_streak_mult     float
+  p_streak_mult     float,
+  p_new_date        date
 )
 RETURNS void
 LANGUAGE plpgsql
 AS $$
 BEGIN
   UPDATE daily_state SET
-    date               = CURRENT_DATE + 1,
+    date               = p_new_date,
     mandatory_met      = false,
     morning_ran        = false,
     eod_ran            = true,
@@ -256,22 +317,51 @@ $$;
 
 
 -- ── spawn_template_instances() ────────────────────────────────────────────────
--- Called by morning cron. Inserts today's task instances from active templates.
--- Idempotent — checks for existing instance before inserting.
+-- Called by morning cron (and by the chat/agent create_task→recurring path, to
+-- spawn a same-day instance if p_date happens to match the new template's cadence).
+-- Cadence-checked per template, then idempotent — checks for an existing instance
+-- for that template + date before inserting.
 
 CREATE OR REPLACE FUNCTION spawn_template_instances(p_date date)
 RETURNS integer
 LANGUAGE plpgsql
 AS $$
 DECLARE
-  tpl     RECORD;
-  spawned integer := 0;
+  tpl        RECORD;
+  spawned    integer := 0;
+  v_dow      integer;
+  v_should   boolean;
+  v_last_day integer;
 BEGIN
+  v_dow := EXTRACT(DOW FROM p_date)::int; -- 0 = Sunday .. 6 = Saturday
+
   FOR tpl IN
     SELECT * FROM task_template WHERE active = true
   LOOP
+    v_should := false;
+
+    IF tpl.recurrence = 'daily' THEN
+      v_should := true;
+    ELSIF tpl.recurrence = 'weekdays' THEN
+      v_should := v_dow BETWEEN 1 AND 5;
+    ELSIF tpl.recurrence = 'weekends' THEN
+      v_should := v_dow IN (0, 6);
+    ELSIF tpl.recurrence = 'weekly' THEN
+      v_should := v_dow = tpl.recurrence_day_of_week;
+    ELSIF tpl.recurrence = 'biweekly' THEN
+      v_should := v_dow = tpl.recurrence_day_of_week
+        AND MOD(FLOOR((p_date - COALESCE(tpl.recurrence_anchor_date, tpl.created_at::date)) / 7)::int, 2) = 0;
+    ELSIF tpl.recurrence = 'monthly' THEN
+      v_last_day := EXTRACT(DAY FROM (date_trunc('month', p_date) + interval '1 month - 1 day'))::int;
+      v_should := EXTRACT(DAY FROM p_date)::int = LEAST(tpl.recurrence_day_of_month, v_last_day);
+    ELSIF tpl.recurrence = 'yearly' THEN
+      v_last_day := EXTRACT(DAY FROM (make_date(EXTRACT(YEAR FROM p_date)::int, tpl.recurrence_month, 1) + interval '1 month - 1 day'))::int;
+      v_should := EXTRACT(MONTH FROM p_date)::int = tpl.recurrence_month
+        AND EXTRACT(DAY FROM p_date)::int = LEAST(tpl.recurrence_day_of_month, v_last_day);
+    END IF;
+
     -- Skip if instance already exists for this template + date
-    IF NOT EXISTS (
+    IF v_should AND NOT EXISTS (
       SELECT 1 FROM task
       WHERE template_id = tpl.id
         AND scheduled_for = p_date

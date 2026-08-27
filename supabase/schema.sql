@@ -57,7 +57,27 @@ CREATE TABLE task_template (
               CHECK (time_block IN ('morning','noon','evening','night','midnight')),
   is_recovery bool    NOT NULL DEFAULT false,
   active      bool    NOT NULL DEFAULT true,
-  created_at  timestamp NOT NULL DEFAULT now()
+
+  -- Recurrence cadence. 'daily'/'weekdays'/'weekends' need no companion field.
+  -- 'weekly'/'biweekly' need recurrence_day_of_week (0=Sunday..6=Saturday, matches
+  -- Postgres EXTRACT(DOW)). 'monthly' needs recurrence_day_of_month. 'yearly' needs
+  -- both recurrence_day_of_month and recurrence_month. recurrence_anchor_date is the
+  -- reference date biweekly uses to know which of the two weeks is "on".
+  recurrence               text NOT NULL DEFAULT 'daily'
+                           CHECK (recurrence IN ('daily','weekdays','weekends','weekly','biweekly','monthly','yearly')),
+  recurrence_day_of_week   int  CHECK (recurrence_day_of_week BETWEEN 0 AND 6),
+  recurrence_day_of_month  int  CHECK (recurrence_day_of_month BETWEEN 1 AND 31),
+  recurrence_month         int  CHECK (recurrence_month BETWEEN 1 AND 12),
+  recurrence_anchor_date   date NOT NULL DEFAULT CURRENT_DATE,
+
+  created_at  timestamp NOT NULL DEFAULT now(),
+
+  CONSTRAINT recurrence_fields_check CHECK (
+    (recurrence IN ('daily','weekdays','weekends')) OR
+    (recurrence IN ('weekly','biweekly') AND recurrence_day_of_week IS NOT NULL) OR
+    (recurrence = 'monthly' AND recurrence_day_of_month IS NOT NULL) OR
+    (recurrence = 'yearly' AND recurrence_day_of_month IS NOT NULL AND recurrence_month IS NOT NULL)
+  )
 );
 
 
@@ -83,6 +103,11 @@ CREATE TABLE task (
                     CHECK (status IN ('pending','active','completed','skipped','cancelled')),
   is_recovery       bool        NOT NULL DEFAULT false,
   late_multiplier   float       NOT NULL DEFAULT 1.0,
+  -- True once a missed mandatory task's carry-forward chain has already taken its
+  -- one-time EOD penalty — prevents re-penalizing the same missed task every night
+  -- it continues to carry forward incomplete. Anchor tasks never reach this (they
+  -- don't carry), routine/project/habit/bonus never set it (they're never penalized).
+  carry_penalized   bool        NOT NULL DEFAULT false,
   embedding_vector  vector(3072),
   projection_status text        NOT NULL DEFAULT 'pending'
                     CHECK (projection_status IN ('pending','done','failed')),

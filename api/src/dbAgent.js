@@ -2,6 +2,8 @@
 // No business logic here. Pure data access layer.
 
 import { supabase } from './supabaseClient.js'
+import { todayEST } from './dateUtils.js'
+import { detectConflict, findAlternativeBlock } from './scheduleEngine.js'
 
 // ── Player state ──────────────────────────────────────────────────────────────
 export async function getPlayerState() {
@@ -41,8 +43,7 @@ export async function getPlayerState() {
 
 // ── Tasks ─────────────────────────────────────────────────────────────────────
 export async function getTasksForDate(dateStr) {
-  const today = new Date().toISOString().split('T')[0]
-  const isToday = dateStr === today
+  const isToday = dateStr === todayEST()
 
   const { data, error } = await supabase
     .from('task')
@@ -77,17 +78,132 @@ export async function getTasksForDate(dateStr) {
   return data || []
 }
 
+// ── Tasks still pending for a given date — used by the EOD cron ───────────────
+// Unlike getTasksForDate(), this has no routine-time-block-passed filtering —
+// EOD needs every still-pending row for that date, not just the ones the UI
+// would currently show.
+export async function getPendingTasksForDate(dateStr) {
+  const { data, error } = await supabase
+    .from('task')
+    .select('*')
+    .eq('scheduled_for', dateStr)
+    .eq('status', 'pending')
+  if (error) throw error
+  return data || []
+}
+
+// ── Carry a missed task forward to a new date ──────────────────────────────────
+// Used by the EOD cron for mandatory/project/habit/bonus tasks still incomplete
+// when the day closes. Closes out the old row and inserts a fresh one for
+// newDateStr, preserving carryPenalized so a mandatory task's one-time penalty
+// (applied separately, before this is called) isn't re-triggered on later nights.
+export async function carryTaskForward(task, newDateStr, carryPenalized) {
+  await cancelTask(task.id)
+  const { data, error } = await supabase
+    .from('task')
+    .insert({
+      template_id:     task.template_id,
+      title:           task.title,
+      task_type:       task.task_type,
+      priority:        task.priority,
+      difficulty:      task.difficulty,
+      time_block:      task.time_block,
+      scheduled_for:   newDateStr,
+      is_recovery:     task.is_recovery,
+      carry_penalized: carryPenalized
+    })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+// ── Apply a missed-task penalty (calls SQL function atomically) ───────────────
+export async function applyTaskPenalty(taskId, xpPenalty, goldPenalty, levelPenalty) {
+  const { data, error } = await supabase.rpc('apply_task_penalty', {
+    p_task_id:        taskId,
+    p_xp_penalty:      xpPenalty,
+    p_gold_penalty:    goldPenalty,
+    p_new_level:       levelPenalty.newLevel,
+    p_new_xp:          levelPenalty.newXp,
+    p_new_xp_to_next:  levelPenalty.newXpToNext
+  })
+  if (error) throw error
+  return data
+}
+
 // ── Create a one-off task ─────────────────────────────────────────────────────
+// If time_block is set, resolves scheduling conflicts against max_tasks_per_block
+// before inserting — may displace a weaker existing task to another block, or
+// reroute this task to an alternative block if it's the weaker one (or a true
+// tie). Covers every caller of createTask() — the agent path and the web/mobile
+// "Add Task" UI alike. Recurring template spawns are a separate SQL-only path
+// and are not covered by this. Conflict outcome, if any, is attached as
+// `_conflict` on the returned row for callers that want to explain what
+// happened (e.g. actionExecutor overriding the chat reply).
 export async function createTask(fields) {
+  const taskType     = fields.task_type
+  const priority     = fields.priority      ?? 'P2'
+  const scheduledFor = fields.scheduled_for ?? todayEST()
+  let   timeBlock    = fields.time_block    ?? null
+  let   conflict     = null
+
+  if (timeBlock) {
+    const { data: existing, error: existingErr } = await supabase
+      .from('task')
+      .select('id, title, task_type, priority, time_block, status')
+      .eq('scheduled_for', scheduledFor)
+      .in('status', ['pending', 'active'])
+    if (existingErr) throw existingErr
+
+    const result = detectConflict(taskType, priority, timeBlock, existing || [])
+
+    if (result.hasConflict) {
+      const isToday = scheduledFor === todayEST()
+      const existingBlocks = {}
+      for (const t of existing || []) {
+        const b = t.time_block ?? 'unscheduled'
+        if (!existingBlocks[b]) existingBlocks[b] = []
+        existingBlocks[b].push(t)
+      }
+
+      if (result.action === 'displace') {
+        const altForDisplaced = findAlternativeBlock(timeBlock, existingBlocks, { isToday, excludeBlock: timeBlock })
+        if (altForDisplaced) {
+          await moveTask(result.displaced.id, altForDisplaced)
+          conflict = { action: 'displaced', displaced: result.displaced, movedTo: altForDisplaced, keptBlock: timeBlock }
+        } else {
+          // No room to relocate the existing task — fall back to rerouting the new one instead
+          const altForNew = findAlternativeBlock(timeBlock, existingBlocks, { isToday })
+          if (altForNew) {
+            conflict  = { action: 'rerouted', requestedBlock: timeBlock, movedTo: altForNew, blocker: result.displaced }
+            timeBlock = altForNew
+          } else {
+            conflict = { action: 'no_slot', requestedBlock: timeBlock }
+          }
+        }
+      } else {
+        // find_alternative — the new task is weaker, or it's a true tie
+        const altForNew = findAlternativeBlock(timeBlock, existingBlocks, { isToday })
+        if (altForNew) {
+          conflict  = { action: 'rerouted', requestedBlock: timeBlock, movedTo: altForNew, blocker: result.blocker }
+          timeBlock = altForNew
+        } else {
+          conflict = { action: 'no_slot', requestedBlock: timeBlock }
+        }
+      }
+    }
+  }
+
   const { data, error } = await supabase
     .from('task')
     .insert({
       title:         fields.title,
-      task_type:     fields.task_type,
-      priority:      fields.priority      ?? 'P2',
+      task_type:     taskType,
+      priority,
       difficulty:    fields.difficulty    ?? 'medium',
-      time_block:    fields.time_block    ?? null,
-      scheduled_for: fields.scheduled_for ?? new Date().toISOString().split('T')[0],
+      time_block:    timeBlock,
+      scheduled_for: scheduledFor,
       scheduled_at:  fields.scheduled_at  ?? null,
       is_recovery:   fields.is_recovery   ?? false
     })
@@ -95,10 +211,15 @@ export async function createTask(fields) {
     .single()
 
   if (error) throw error
+  if (conflict) data._conflict = conflict
   return data
 }
 
 // ── Create a recurring template ───────────────────────────────────────────────
+// recurrence: 'daily'|'weekdays'|'weekends'|'weekly'|'biweekly'|'monthly'|'yearly'
+// weekly/biweekly need recurrence_day_of_week (0=Sun..6=Sat, matches Postgres DOW).
+// monthly needs recurrence_day_of_month. yearly needs both recurrence_day_of_month
+// and recurrence_month. See supabase/functions.sql spawn_template_instances().
 export async function createTemplate(fields) {
   const { data, error } = await supabase
     .from('task_template')
@@ -108,11 +229,35 @@ export async function createTemplate(fields) {
       priority:    fields.priority    ?? 'P2',
       difficulty:  fields.difficulty  ?? 'medium',
       time_block:  fields.time_block  ?? null,
-      is_recovery: fields.is_recovery ?? false
+      is_recovery: fields.is_recovery ?? false,
+      recurrence:               fields.recurrence               ?? 'daily',
+      recurrence_day_of_week:   fields.recurrence_day_of_week   ?? null,
+      recurrence_day_of_month:  fields.recurrence_day_of_month  ?? null,
+      recurrence_month:         fields.recurrence_month         ?? null
     })
     .select()
     .single()
 
+  if (error) throw error
+  return data
+}
+
+// ── Spawn today's instance for a just-created template, if today matches its
+// cadence ─────────────────────────────────────────────────────────────────────
+// Reuses the same cadence-aware RPC the morning cron calls (idempotent — safe to
+// call more than once for the same date). Returns the spawned task row, or null
+// if today doesn't match the template's cadence (e.g. a "weekly on Monday"
+// template created on a Tuesday — nothing to show until next Monday).
+export async function spawnTodayInstance(templateId, dateStr) {
+  const { error: rpcError } = await supabase.rpc('spawn_template_instances', { p_date: dateStr })
+  if (rpcError) throw rpcError
+
+  const { data, error } = await supabase
+    .from('task')
+    .select('*')
+    .eq('template_id', templateId)
+    .eq('scheduled_for', dateStr)
+    .maybeSingle()
   if (error) throw error
   return data
 }
@@ -248,7 +393,7 @@ export async function createShopItem({ name, description, cost_gold, type }) {
 }
 
 export async function getShopWithCounts() {
-  const today = new Date().toISOString().split('T')[0]
+  const today = todayEST()
   const [itemsRes, purchasesRes] = await Promise.all([
     supabase.from('shop_item').select('*').eq('active', true).order('cost_gold'),
     supabase.from('purchase_log').select('shop_item_id').gte('purchased_at', `${today}T00:00:00`)
@@ -293,7 +438,7 @@ export async function getSnapshots(limit = 30) {
 export async function getCalendar(monthStr) {
   const [year, mon] = monthStr.split('-').map(Number)
   const start = `${monthStr}-01`
-  const end   = new Date(year, mon, 1).toISOString().split('T')[0]
+  const end   = new Date(Date.UTC(year, mon, 1)).toISOString().split('T')[0]
 
   const { data, error } = await supabase
     .from('task')
@@ -343,7 +488,7 @@ export async function logLeisure(shopItemId, quantity = 1, unit = null, notes = 
 }
 
 export async function getTodayLeisure() {
-  const today = new Date().toISOString().split('T')[0]
+  const today = todayEST()
   const { data, error } = await supabase
     .from('leisure_log')
     .select('*, shop_item(name, tracking_unit)')

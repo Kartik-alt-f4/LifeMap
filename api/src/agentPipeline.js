@@ -4,6 +4,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { buildSystemPrompt, getServer } from './configLoader.js'
 import { getScheduleContext, formatScheduleContext, validateActions } from './scheduleEngine.js'
+import { todayEST, tomorrowEST } from './dateUtils.js'
 
 let _genAI = null
 
@@ -39,9 +40,8 @@ export async function runAgent(userMessage, sessionHistory, playerState, dateStr
   // Player state context — compact, only essentials
   // Inject real server time so model doesn't hallucinate dates
   const now      = new Date()
-  const nowISO   = now.toISOString()
-  const todayDate= now.toISOString().split('T')[0]
-  const tomorrowDate = new Date(now.getTime() + 86400000).toISOString().split('T')[0]
+  const todayDate     = todayEST()
+  const tomorrowDate  = tomorrowEST()
   const timeStr  = now.toLocaleString('en-US', { timeZone: 'America/New_York', hour:'2-digit', minute:'2-digit', hour12:true })
 
   const stateCtx = `\n\n[STATE]\nLv${playerState.level} | ⚡${playerState.energy.current}/${playerState.energy.max} | 🔥${playerState.streak} | ◆${playerState.available_gold}g\nDATE: ${todayDate} | TIME: ${timeStr} EST | TOMORROW: ${tomorrowDate}\n[/STATE]`
@@ -116,7 +116,10 @@ export async function runAgent(userMessage, sessionHistory, playerState, dateStr
         // Convert to edit_task — server will find task_id by title match
         const { title, ...fields } = action
         return { type: 'edit_task', task_id: null, _title_hint: title, fields: Object.fromEntries(
-          Object.entries(fields).filter(([k]) => !['type','is_recurring','scheduled_at','scheduled_for'].includes(k))
+          Object.entries(fields).filter(([k]) => ![
+            'type', 'scheduled_at', 'scheduled_for',
+            'recurrence', 'recurrence_day_of_week', 'recurrence_day_of_month', 'recurrence_month'
+          ].includes(k))
         )}
       }
       return action

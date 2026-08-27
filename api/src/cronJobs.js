@@ -3,9 +3,13 @@
 
 import { supabase }       from './supabaseClient.js'
 import { postToDiscord }  from './discordBot.js'
-import { getPushToken, savePushToken, getPlayerState } from './dbAgent.js'
+import {
+  getPushToken, savePushToken, getPlayerState,
+  getPendingTasksForDate, skipTask, carryTaskForward, applyTaskPenalty
+} from './dbAgent.js'
 import { getGame, getServer, getRank } from './configLoader.js'
-import { computeStreakMultiplier }   from './rpgEngine.js'
+import { computeStreakMultiplier, computeTaskRewards, computeLevelPenalty } from './rpgEngine.js'
+import { addDays } from './dateUtils.js'
 
 // ── Push notification helper ──────────────────────────────────────────────────
 async function sendPush(title, body) {
@@ -30,7 +34,11 @@ export async function runMorning() {
 
   if (state.morning_ran) return { skipped: true }
 
-  const today = new Date().toISOString().split('T')[0]
+  // Trust daily_state.date as "today" rather than re-deriving it from the live
+  // clock — runEod() is what advances this date (via roll_daily_state, passed
+  // explicitly), so morning and EOD always agree on what day it is, even if
+  // cron fell behind and daily_state.date lags the real calendar date.
+  const today = state.date
 
   // 1. Spawn today's task instances from templates
   const { data: spawned } = await supabase.rpc('spawn_template_instances', { p_date: today })
@@ -47,35 +55,14 @@ export async function runMorning() {
     date:           today
   }).eq('id', 1)
 
-  // 4. Carry over unfinished non-routine tasks from yesterday
-  const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0]
-  const { data: carryover } = await supabase
-    .from('task')
-    .select('*')
-    .eq('scheduled_for', yesterday)
-    .eq('status', 'pending')
-    .not('task_type', 'eq', 'routine')
+  // Carryover is no longer morning's job — it happens at EOD, the moment a day
+  // closes, so tasks that carry are already sitting here as normal pending rows
+  // by the time this briefing runs. See runEod() for the per-type carry/penalty
+  // logic (this used to live here, querying yesterday's still-'pending' tasks —
+  // but EOD always runs first and had already flipped those to 'skipped' or
+  // moved them itself, so this step almost never found anything to carry).
 
-  let carriedCount = 0
-  for (const task of carryover || []) {
-    const daysLate      = 1
-    const lateMultiplier = Math.pow(getGame().tasks.late_penalty_per_day, daysLate)
-    await supabase.from('task').update({ status: 'cancelled' }).eq('id', task.id)
-    await supabase.from('task').insert({
-      title:          task.title,
-      task_type:      task.task_type,
-      priority:       task.priority,
-      difficulty:     task.difficulty,
-      time_block:     task.time_block,
-      scheduled_for:  today,
-      is_recovery:    task.is_recovery,
-      late_multiplier: lateMultiplier,
-      template_id:    task.template_id
-    })
-    carriedCount++
-  }
-
-  // 5. Build briefing
+  // 4. Build briefing
   const player = await getPlayerState()
   const { data: tasksToday } = await supabase
     .from('task')
@@ -92,7 +79,6 @@ export async function runMorning() {
   const briefing = [
     `☀️ **${today}** — Lv${player.level} ${getRank(player.level)}`,
     `⚡ ${player.energy.current}/${player.energy.max}  🔥 ${player.streak} day streak  ◆ ${player.available_gold}g`,
-    carriedCount ? `⚠ ${carriedCount} task(s) carried from yesterday` : '',
     tasksToday?.length ? `\n**Today (${tasksToday.length}):**\n${taskLines}` : 'No tasks scheduled.',
     '\nSystem ready.'
   ].filter(Boolean).join('\n')
@@ -102,7 +88,7 @@ export async function runMorning() {
     await sendPush('Morning briefing', `${tasksToday?.length ?? 0} tasks today. Streak: ${player.streak}`)
   }
 
-  return { ok: true, spawned, carried: carriedCount }
+  return { ok: true, spawned }
 }
 
 // ── EOD ───────────────────────────────────────────────────────────────────────
@@ -115,13 +101,52 @@ export async function runEod() {
   if (!state.morning_ran) return { skipped: true, reason: 'morning_not_run' }
   if (state.eod_ran)      return { skipped: true, reason: 'already_ran' }
 
-  const today = state.date
+  const today    = state.date
+  const tomorrow = addDays(today, 1)
 
-  // 1. Mark all pending tasks as skipped
-  await supabase.from('task')
-    .update({ status: 'skipped' })
-    .eq('scheduled_for', today)
-    .eq('status', 'pending')
+  // 1. Close out today's still-pending tasks, by type:
+  //    - routine:  skipped, no carry, no penalty (a fresh instance spawns
+  //                tomorrow anyway if it's templated)
+  //    - anchor:   skipped AND penalized once — it belongs to that day only,
+  //                doesn't carry forward
+  //    - mandatory: penalized once (only the first night its carry chain goes
+  //                incomplete — carry_penalized guards against re-penalizing
+  //                every subsequent night), then carries forward like the rest
+  //    - project / habit / bonus: carry forward, no penalty
+  let runningPlayer = await getPlayerState()
+  let penalizedCount = 0
+  let carriedCount   = 0
+
+  const pending = await getPendingTasksForDate(today)
+  for (const task of pending) {
+    if (task.task_type === 'routine') {
+      await skipTask(task.id)
+      continue
+    }
+
+    if (task.task_type === 'anchor') {
+      const { xp, gold }  = computeTaskRewards(task)
+      const levelPenalty  = computeLevelPenalty(runningPlayer.level, runningPlayer.current_xp, xp)
+      await applyTaskPenalty(task.id, xp, gold, levelPenalty)
+      runningPlayer = { ...runningPlayer, level: levelPenalty.newLevel, current_xp: levelPenalty.newXp }
+      penalizedCount++
+      await skipTask(task.id)
+      continue
+    }
+
+    // mandatory / project / habit / bonus — all carry forward
+    let carryPenalized = task.carry_penalized
+    if (task.task_type === 'mandatory' && !task.carry_penalized) {
+      const { xp, gold }  = computeTaskRewards(task)
+      const levelPenalty  = computeLevelPenalty(runningPlayer.level, runningPlayer.current_xp, xp)
+      await applyTaskPenalty(task.id, xp, gold, levelPenalty)
+      runningPlayer = { ...runningPlayer, level: levelPenalty.newLevel, current_xp: levelPenalty.newXp }
+      penalizedCount++
+      carryPenalized = true
+    }
+    await carryTaskForward(task, tomorrow, carryPenalized)
+    carriedCount++
+  }
 
   // 2. Update streak
   const newStreak = state.mandatory_met ? state.day_streak + 1 : state.day_streak - 1
@@ -187,10 +212,14 @@ export async function runEod() {
     leisure_summary: Object.keys(leisureSummary).length ? leisureSummary : null
   })
 
-  // 5. Roll daily state
+  // 5. Roll daily state — pass tomorrow explicitly so it matches exactly what
+  // carried tasks (step 1) were scheduled for, instead of the RPC independently
+  // deriving CURRENT_DATE + 1 (which disagrees with `tomorrow` whenever
+  // daily_state.date has drifted behind the real clock).
   await supabase.rpc('roll_daily_state', {
     p_new_streak:  newStreak,
-    p_streak_mult: streakMult
+    p_streak_mult: streakMult,
+    p_new_date:    tomorrow
   })
 
   // 6. EOD summary
@@ -199,16 +228,18 @@ export async function runEod() {
     `🌙 **EOD ${today}**`,
     streakMsg,
     `✅ ${completed ?? 0} completed  ⏭ ${skipped ?? 0} skipped`,
+    penalizedCount ? `⚠ ${penalizedCount} penalized (missed anchor/mandatory)` : '',
+    carriedCount   ? `↪ ${carriedCount} carried to tomorrow` : '',
     `Lv${player.level}  ⚡${player.energy.current}/${player.energy.max}  ◆${player.available_gold}g`,
     'Day logged.'
-  ].join('\n')
+  ].filter(Boolean).join('\n')
 
   if (getServer().notifications.eod_summary) {
     await postToDiscord(summary)
     await sendPush('Day complete', `${completed ?? 0} done. ${streakMsg}`)
   }
 
-  return { ok: true, newStreak, mandatory_met: state.mandatory_met }
+  return { ok: true, newStreak, mandatory_met: state.mandatory_met, penalized: penalizedCount, carried: carriedCount }
 }
 
 // ── REMIND ────────────────────────────────────────────────────────────────────

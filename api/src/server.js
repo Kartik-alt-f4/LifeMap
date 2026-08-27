@@ -7,6 +7,7 @@ import { registerUser }                    from '../../scripts/register-user.js'
 import { setupSupabase, triggerEmbedSeed } from '../../scripts/setup-supabase.js'
 
 import { loadConfig, getConfig, getServer, writeConfigSection } from './configLoader.js'
+import { todayEST } from './dateUtils.js'
 import { initGemini, runAgent }    from './agentPipeline.js'
 import { initProjection, projectTask } from './projectionEngine.js'
 import { initDiscordBot }          from './discordBot.js'
@@ -89,7 +90,7 @@ app.get('/state', async (_, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 app.get('/tasks', async (req, res) => {
   try {
-    const date = req.query.date ?? new Date().toISOString().split('T')[0]
+    const date = req.query.date ?? todayEST()
     res.json(await getTasksForDate(date))
   } catch (e) { res.status(500).json({ error: e.message }) }
 })
@@ -116,7 +117,7 @@ app.post('/tasks/:id/complete', async (req, res) => {
     const taskId = parseInt(req.params.id)
     if (isNaN(taskId)) return res.status(400).json({ error: 'Invalid task ID' })
 
-    const today  = new Date().toISOString().split('T')[0]
+    const today  = todayEST()
     const tasks  = await getTasksForDate(today)
     const task   = tasks.find(t => t.id === taskId)
 
@@ -187,7 +188,7 @@ app.post('/chat', async (req, res) => {
     const { message, session_id = 'web' } = req.body
     if (!message) return res.status(400).json({ error: 'message required' })
 
-    const today       = new Date().toISOString().split('T')[0]
+    const today       = todayEST()
     const [playerState, todayTasks] = await Promise.all([
       getPlayerState(),
       getTasksForDate(today)
@@ -199,7 +200,7 @@ app.post('/chat', async (req, res) => {
 
     let actionResults = []
     if (agentResult.actions?.length) {
-      actionResults = await executeActions(agentResult.actions)
+      actionResults = await executeActions(agentResult.actions, playerState, message)
     }
 
     const updatedPlayer = await getPlayerState()
@@ -207,9 +208,17 @@ app.post('/chat', async (req, res) => {
 
     let finalReply = agentResult.reply
     if (actionResults.length > 0) {
-      const successActions = actionResults.filter(r => r.success)
-      if (successActions.length > 0 && !finalReply) {
-        finalReply = successActions.map(r => r.message).join('\n')
+      // The model wrote its reply before this action ran, so it can't know a
+      // scheduling conflict actually happened — override with the accurate
+      // message when createTask() resolved one (see actionExecutor.js).
+      const conflictResult = actionResults.find(r => r.success && r.conflictMessage)
+      if (conflictResult) {
+        finalReply = conflictResult.conflictMessage
+      } else {
+        const successActions = actionResults.filter(r => r.success)
+        if (successActions.length > 0 && !finalReply) {
+          finalReply = successActions.map(r => r.message).join('\n')
+        }
       }
     }
 

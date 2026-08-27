@@ -49,7 +49,10 @@ export function buildSystemPrompt() {
 RULES (follow strictly):
 - NO CONFIRM STEP. Act immediately on first message. Never ask "shall I add this?" or "want me to create?".
 - If the user says "yes", "ok", "sure", "do it" — they are confirming something from OUTSIDE this context. Reply: "Not sure what to confirm. Try rephrasing."
-- INFER everything: type, priority, difficulty, time_block, is_recovery. Never ask.
+- INFER everything: type, priority, difficulty, time_block, is_recovery, recurrence. Never ask.
+- RECURRENCE default is "none" (a normal one-off task). Only set it when the message clearly
+  describes a repeating task ("every day", "every Monday", "biweekly", "on the 1st of every
+  month", "every March 4th") — do not assume recurrence just because a task sounds habitual.
 - ONE LINE REPLY per action. No questions after success.
 - DUPLICATE GUARD: before creating, check TODAY_TASKS. If same title exists, say so instead of creating again.
 - Use TODAY_TASKS task IDs for edits/completions/skips.
@@ -80,6 +83,14 @@ DIFFICULTY: low(<30min), medium(30-90min), high(>90min or heavy cognitive load)
 
 RECOVERY: set is_recovery=true if: ${inference.recovery_keywords.slice(0,8).join(', ')}
 
+RECURRENCE: "none"(default) | "daily" | "weekdays" | "weekends" | "weekly" | "biweekly" | "monthly" | "yearly"
+  weekly/biweekly -> also set recurrence_day_of_week (0=Sunday..6=Saturday)
+  monthly         -> also set recurrence_day_of_month (1-31)
+  yearly          -> also set recurrence_day_of_month AND recurrence_month (1-12)
+  Recurring tasks ignore scheduled_at/scheduled_for — only time_block applies.
+  A recurring task may not appear today even when created today — it only shows up
+  on a date matching its cadence (e.g. "every Monday" made on a Tuesday starts next Monday).
+
 EXAMPLES:
   "add call mom by EOD"            -> create_task, habit, P2, medium, night
   "gym in 30 minutes"              -> create_task, habit, P2, high, scheduled_at=now+30m
@@ -87,6 +98,9 @@ EXAMPLES:
   "edit call mom to bonus evening" -> edit_task, task_id from TODAY_TASKS, fields:{task_type:"bonus",time_block:"evening"}
   "done with gym"                  -> complete_task, task_id from TODAY_TASKS matching "gym"
   "skip reading today"             -> skip_task, task_id from TODAY_TASKS matching "reading"
+  "remind me to do laundry every Sunday" -> create_task, habit, recurrence:"weekly", recurrence_day_of_week:0
+  "pay rent on the 1st every month"      -> create_task, mandatory, recurrence:"monthly", recurrence_day_of_month:1
+  "gym every weekday morning"            -> create_task, habit, recurrence:"weekdays", time_block:"morning"
   "add shop item Netflix 10 gold"   -> create_shop_item, name:"Netflix Evening", cost_gold:10, item_type:"leisure"
   "add day off to shop for 30 gold" -> create_shop_item, name:"Day Off", cost_gold:30, item_type:"day_off"
   "smoked 3 today"                  -> log_leisure, infer shop_item_id from leisure items matching "smoke/cigarette", quantity:3, unit:"count"
@@ -113,14 +127,15 @@ OUTPUT: valid JSON only. No markdown. No text outside the JSON.
 }
 
 Action schemas:
-  create_task:  { type, title, task_type, priority, difficulty, time_block, scheduled_at, scheduled_for, is_recovery, is_recurring }
+  create_task:  { type, title, task_type, priority, difficulty, time_block, scheduled_at, scheduled_for, is_recovery, recurrence, recurrence_day_of_week, recurrence_day_of_month, recurrence_month }  // see RECURRENCE above
   edit_task:    { type, task_id, fields: { only_changed_fields } }  // fields can include: title, description, task_type, priority, difficulty, time_block, scheduled_at, is_recovery
   complete_task:{ type, task_id }
   skip_task:    { type, task_id }
   cancel_task:  { type, task_id }
-  move_task:    { type, task_id, new_time_block }`
+  move_task:    { type, task_id, new_time_block }
   create_shop_item: { type, name, description, cost_gold, item_type }  // item_type: "leisure", "day_off", "day_off_plus"
   log_leisure:      { type, shop_item_id, quantity, unit, notes }  // unit: count|minutes|boolean. Infer shop_item_id from leisure item name.
+}`
 }
 
 // ── Rank from level ───────────────────────────────────────────────────────────

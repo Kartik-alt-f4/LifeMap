@@ -53,6 +53,22 @@ export function computeNewLevel(currentLevel, currentXp, xpGained) {
   return { newLevel: level, newXp: xp, newXpToNext: xpToNext }
 }
 
+// ── Reverse of computeNewLevel, for missed-task penalties ─────────────────────
+// Walks levels back down as xpLoss exceeds the current level's progress. Floors
+// at level 1 / 0 XP — a penalty can never drop the player below their starting level.
+export function computeLevelPenalty(currentLevel, currentXp, xpLoss) {
+  let level = currentLevel
+  let xp    = currentXp - xpLoss
+
+  while (xp < 0 && level > 1) {
+    level -= 1
+    xp    += computeXpToNext(level)
+  }
+  if (xp < 0) xp = 0
+
+  return { newLevel: level, newXp: xp, newXpToNext: computeXpToNext(level) }
+}
+
 // ── Energy drain ──────────────────────────────────────────────────────────────
 export function computeEnergyDrain(task) {
   const { energy } = getGame()
