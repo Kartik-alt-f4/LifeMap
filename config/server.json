@@ -21,15 +21,17 @@
   },
 
   "cron": {
-    "morning_utc":          "0 11 * * *",
-    "eod_utc":              "0 3 * * *",
+    "_comment": "Documentation only — nothing reads these at runtime. The real schedule lives in .github/workflows/*.yml, each firing several redundant offset attempts per target time rather than one exact shot (see those files for why).",
+    "morning_utc":          "~11:xx UTC (4 offset attempts, 11:07-12:37)",
+    "eod_utc":              "~03:xx UTC (4 offset attempts, 03:07-04:37)",
     "remind_interval_min":  15,
     "health_interval_min":  14,
-    "cleanup_utc":          "0 3 * * 0"
+    "cleanup_utc":          "~03:xx UTC Sunday (2 offset attempts, 03:11 & 03:41)"
   },
 
   "notifications": {
     "remind_minutes_before": 30,
+    "remind_lookback_min":   20,
     "early_remind_task_types":       ["anchor", "mandatory"],
     "early_remind_window_start_min": 90,
     "early_remind_window_end_min":   60,

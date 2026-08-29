@@ -2,7 +2,14 @@ name: EOD Cron
 
 on:
   schedule:
-    - cron: '0 3 * * *'
+    # 4 offset, redundant attempts instead of one shot at the exact hour — see
+    # morning.yml for why. runEod() is idempotency-guarded via
+    # daily_state.eod_ran, so extra attempts after the first successful one
+    # are free no-ops.
+    - cron: '7 3 * * *'
+    - cron: '37 3 * * *'
+    - cron: '7 4 * * *'
+    - cron: '37 4 * * *'
   workflow_dispatch:
 
 jobs:

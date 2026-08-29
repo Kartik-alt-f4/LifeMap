@@ -42,9 +42,14 @@ export async function getPlayerState() {
 }
 
 // ── Tasks ─────────────────────────────────────────────────────────────────────
+// Previously hid pending 'routine' tasks once their time_block had passed
+// (EST-based cutoffs) — that left a pending task genuinely invisible for
+// hours until EOD formally skipped it, with no way to see or complete it
+// late. web/src/pages/Dashboard.jsx's isOverdue() already computes the same
+// "has this task's window passed" check for any pending task and drives the
+// .task-row.urgent styling — routine tasks now just flow through to that
+// same mechanism instead of being hidden ahead of it.
 export async function getTasksForDate(dateStr) {
-  const isToday = dateStr === todayEST()
-
   const { data, error } = await supabase
     .from('task')
     .select('*')
@@ -53,35 +58,13 @@ export async function getTasksForDate(dateStr) {
     .order('scheduled_at', { ascending: true, nullsFirst: false })
 
   if (error) throw error
-
-  if (isToday) {
-    // Filter passed routine time blocks using EST
-    const estHour = parseInt(
-      new Date().toLocaleString('en-US', {
-        timeZone: 'America/New_York', hour: 'numeric', hour12: false
-      }).replace('24', '0'), 10
-    )
-    const passedBlocks = []
-    if (estHour >= 12) passedBlocks.push('morning')
-    if (estHour >= 14) passedBlocks.push('noon')
-    if (estHour >= 19) passedBlocks.push('evening')
-    if (estHour >= 23) passedBlocks.push('night')
-
-    return (data || []).filter(task => {
-      if (task.task_type !== 'routine') return true
-      if (!task.time_block)            return true
-      if (task.status === 'completed') return true
-      return !passedBlocks.includes(task.time_block)
-    })
-  }
-
   return data || []
 }
 
 // ── Tasks still pending for a given date — used by the EOD cron ───────────────
-// Unlike getTasksForDate(), this has no routine-time-block-passed filtering —
-// EOD needs every still-pending row for that date, not just the ones the UI
-// would currently show.
+// Unlike getTasksForDate(), only returns status='pending' rows — EOD needs
+// exactly what's left to carry/penalize/skip, not completed or already-
+// skipped tasks alongside them.
 export async function getPendingTasksForDate(dateStr) {
   const { data, error } = await supabase
     .from('task')
@@ -607,11 +590,11 @@ export async function generateDescription(taskId, title, taskType, userContext =
     })
 
     const contextLine = userContext
-      ? `The user said: "${userContext}". Use this to be specific — mention only what they described, not general assumptions about the topic.`
-      : 'Be specific and concrete based on the task title only.'
+      ? `The user's full message was: "${userContext}" — it may describe several different tasks at once. Pull out only the detail relevant to "${title}"; ignore anything in it about their other, separate tasks.`
+      : 'No extra context was given.'
     const prompt = `Task: "${title}" (type: ${taskType}).
 ${contextLine}
-Write ONE sentence (max 20 words) describing exactly what this task session involves. No filler. No guessing beyond what was stated.`
+Write ONE sentence (max 20 words) describing what this specific task session involves. Stay grounded in "${title}" — never restate the user's whole message or mention their other tasks. If the message gives little or no detail for this one specifically, use your own reasonable, concrete judgment rather than being vague or generic — a bit of creative specificity beats a flat restatement.`
 
     const result = await model.generateContent(prompt)
     const description = result.response.text().trim().replace(/^"|"$/g, '')

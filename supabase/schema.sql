@@ -37,7 +37,14 @@ CREATE TABLE daily_state (
   morning_ran       bool    NOT NULL DEFAULT false,
   eod_ran           bool    NOT NULL DEFAULT false,
   day_off_granted       bool    NOT NULL DEFAULT false,
-  free_leisure_today    bool    NOT NULL DEFAULT false
+  free_leisure_today    bool    NOT NULL DEFAULT false,
+  -- Cron watchdog — see migrations/009_cron_watchdog.sql for why these are
+  -- separate from morning_ran/eod_ran (which flip meaning across the day
+  -- boundary and aren't safe to compare against real clock time).
+  last_morning_run_at   timestamptz,
+  last_eod_run_at       timestamptz,
+  morning_alert_sent_on date,
+  eod_alert_sent_on     date
 );
 
 

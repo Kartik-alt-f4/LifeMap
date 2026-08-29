@@ -2,7 +2,16 @@ name: Morning Cron
 
 on:
   schedule:
-    - cron: '0 11 * * *'
+    # 4 offset, redundant attempts instead of one shot at the exact hour —
+    # GitHub Actions' scheduler is more congested (and more likely to drop a
+    # run) right at round-number minutes, and individual scheduled runs are
+    # not guaranteed to fire at all. runMorning() is idempotency-guarded via
+    # daily_state.morning_ran, so every attempt after the first successful one
+    # is a free no-op — this just raises the odds that at least one lands.
+    - cron: '7 11 * * *'
+    - cron: '37 11 * * *'
+    - cron: '7 12 * * *'
+    - cron: '37 12 * * *'
   workflow_dispatch:
 
 jobs:

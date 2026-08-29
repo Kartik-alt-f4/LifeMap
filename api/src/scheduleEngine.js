@@ -139,8 +139,9 @@ export function findAlternativeBlock(preferredBlock, existingBlocks, { isToday =
   return null // all eligible blocks full
 }
 
-// Same cutoff hours getTasksForDate() uses for routine tasks, generalized here
-// for any block-picking decision that needs to know what's already passed today.
+// EST cutoff hours for "has this time_block already passed today" — used for
+// block-picking decisions during conflict resolution (never route a task into
+// an already-passed block).
 function passedBlocksForToday() {
   const estHour = parseInt(
     new Date().toLocaleString('en-US', { timeZone: 'America/New_York', hour: 'numeric', hour12: false }).replace('24', '0'),

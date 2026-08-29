@@ -12,7 +12,7 @@ import { initGemini }    from './agentPipeline.js'
 import { initProjection, projectTask } from './projectionEngine.js'
 import { initDiscordBot }          from './discordBot.js'
 import { handleChatMessage }       from './chatHandler.js'
-import { runMorning, runEod, runRemind, runCleanup, checkStreakWarning } from './cronJobs.js'
+import { runMorning, runEod, runRemind, runCleanup, checkStreakWarning, checkCronWatchdog } from './cronJobs.js'
 import {
   getPlayerState, getTasksForDate, createTask, createTemplate, editTask,
   skipTask, cancelTask, completeTask, getTemplates, deactivateTemplate,
@@ -57,7 +57,10 @@ function cronAuth(req, res, next) {
 // ─────────────────────────────────────────────────────────────────────────────
 // HEALTH
 // ─────────────────────────────────────────────────────────────────────────────
-app.get('/health', (_, res) => res.json({ status: 'ok' }))
+app.get('/health', (_, res) => {
+  res.json({ status: 'ok' })
+  checkCronWatchdog().catch(e => console.error('[watchdog]', e.message))
+})
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONFIG

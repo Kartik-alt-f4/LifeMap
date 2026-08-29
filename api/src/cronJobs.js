@@ -49,10 +49,11 @@ export async function runMorning() {
 
   // 3. Reset day_off for new day, reset eod_ran
   await supabase.from('daily_state').update({
-    morning_ran:    true,
-    eod_ran:        false,
-    day_off_granted: false,
-    date:           today
+    morning_ran:         true,
+    eod_ran:             false,
+    day_off_granted:     false,
+    date:                today,
+    last_morning_run_at: new Date().toISOString()
   }).eq('id', 1)
 
   // Carryover is no longer morning's job — it happens at EOD, the moment a day
@@ -221,6 +222,8 @@ export async function runEod() {
     p_streak_mult: streakMult,
     p_new_date:    tomorrow
   })
+  await supabase.from('daily_state')
+    .update({ last_eod_run_at: new Date().toISOString() }).eq('id', 1)
 
   // 6. EOD summary
   const streakMsg   = state.mandatory_met ? `🔥 Streak: ${newStreak}` : `💀 Streak broken (${newStreak})`
@@ -267,10 +270,11 @@ async function sendWindowReminders({ windowStartMin, windowEndMin, taskTypes, fl
 
   for (const task of upcoming || []) {
     const minsAway = Math.round((new Date(task.scheduled_at) - now) / 60000)
-    const msg      = formatMessage(task, minsAway)
+    const msg       = formatMessage(task, minsAway)
+    const pushWhen  = minsAway <= 0 ? 'now' : `in ${minsAway} min`
 
     await postToDiscord(msg)
-    await sendPush(pushTitle, `${task.title} in ${minsAway} min`)
+    await sendPush(pushTitle, `${task.title} ${pushWhen}`)
     await supabase.from('task').update({ [flagColumn]: nowIso }).eq('id', task.id)
   }
 
@@ -280,14 +284,20 @@ async function sendWindowReminders({ windowStartMin, windowEndMin, taskTypes, fl
 export async function runRemind() {
   const cfg = getServer().notifications
 
+  // windowStartMin is negative — a run that fires late (cron drift, a dropped
+  // trigger) can still catch a task whose ideal reminder moment already
+  // passed by up to remind_lookback_min, instead of silently losing it
+  // forever. Before this, the window was forward-only ([0, remind_minutes_
+  // before]), so any gap between runs bigger than remind_minutes_before could
+  // permanently drop reminders that fell entirely inside the gap.
   const notified = await sendWindowReminders({
-    windowStartMin: 0,
+    windowStartMin: -cfg.remind_lookback_min,
     windowEndMin:   cfg.remind_minutes_before,
     taskTypes:      ['anchor', 'mandatory', 'habit'],
     flagColumn:     'reminded_at',
     pushTitle:      'Upcoming task',
     formatMessage:  (task, minsAway) =>
-      `${REMIND_ICONS[task.task_type] ?? '📌'} **${task.title}** — in ${minsAway} min`
+      `${REMIND_ICONS[task.task_type] ?? '📌'} **${task.title}** — ${minsAway <= 0 ? 'now' : `in ${minsAway} min`}`
   })
 
   // Long-lead heads-up for anchor/mandatory specifically — fires once, roughly
@@ -313,6 +323,62 @@ export async function runCleanup() {
   const { data } = await supabase
     .from('conversation_session').delete().lt('updated_at', cutoff).select('id')
   return { sessions_deleted: data?.length ?? 0 }
+}
+
+// ── CRON WATCHDOG ────────────────────────────────────────────────────────────
+// Called from GET /health, which fires reliably every ~10-14 min via an
+// external ping service (cron-job.org) — the one trigger in this system NOT
+// subject to GitHub Actions' own scheduling unreliability. Warns on Discord
+// once per missed day if morning/EOD haven't run by an hour past their
+// expected UTC window. Uses last_morning_run_at/last_eod_run_at (set only on
+// a real execution, never on an idempotency-skip) rather than
+// daily_state.morning_ran/eod_ran, which flip meaning across the day
+// boundary and aren't safe to compare against real clock time — see
+// migrations/009_cron_watchdog.sql.
+const MORNING_EXPECTED_UTC_HOUR = 11
+const EOD_EXPECTED_UTC_HOUR     = 3
+const WATCHDOG_GRACE_HOURS      = 1
+
+export async function checkCronWatchdog() {
+  try {
+    const now      = new Date()
+    const todayUtc = now.toISOString().slice(0, 10)
+
+    const { data: state } = await supabase
+      .from('daily_state')
+      .select('last_morning_run_at, last_eod_run_at, morning_alert_sent_on, eod_alert_sent_on')
+      .eq('id', 1).single()
+    if (!state) return
+
+    await checkOneCron({
+      label: 'Morning', expectedHour: MORNING_EXPECTED_UTC_HOUR,
+      lastRunAt: state.last_morning_run_at, alertSentOn: state.morning_alert_sent_on,
+      alertColumn: 'morning_alert_sent_on', now, todayUtc
+    })
+    await checkOneCron({
+      label: 'EOD', expectedHour: EOD_EXPECTED_UTC_HOUR,
+      lastRunAt: state.last_eod_run_at, alertSentOn: state.eod_alert_sent_on,
+      alertColumn: 'eod_alert_sent_on', now, todayUtc
+    })
+  } catch (err) {
+    console.error('[watchdog] check failed:', err.message)
+  }
+}
+
+async function checkOneCron({ label, expectedHour, lastRunAt, alertSentOn, alertColumn, now, todayUtc }) {
+  const cutoff = new Date(`${todayUtc}T${String(expectedHour).padStart(2, '0')}:00:00Z`)
+  cutoff.setUTCHours(cutoff.getUTCHours() + WATCHDOG_GRACE_HOURS)
+  if (now < cutoff) return // window hasn't opened yet today
+
+  const ranToday = lastRunAt && new Date(lastRunAt).toISOString().slice(0, 10) === todayUtc
+  if (ranToday) return
+
+  if (alertSentOn === todayUtc) return // already warned today — re-arms itself tomorrow
+
+  await postToDiscord(
+    `⚠️ ${label} cron hasn't run today (expected ~${expectedHour}:00 UTC, now ${now.toISOString().slice(11, 16)} UTC). Check GitHub Actions.`
+  )
+  await supabase.from('daily_state').update({ [alertColumn]: todayUtc }).eq('id', 1)
 }
 
 // ── STREAK WARNING ─────────────────────────────────────────────────────────────

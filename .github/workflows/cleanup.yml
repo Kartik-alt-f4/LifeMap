@@ -2,7 +2,11 @@ name: Weekly Cleanup
 
 on:
   schedule:
-    - cron: '0 3 * * 0'
+    # Offset off the round hour, plus one backup attempt 30 min later — see
+    # morning.yml for why. runCleanup() just deletes rows past a TTL cutoff,
+    # so a duplicate run is harmless (nothing left to delete the second time).
+    - cron: '11 3 * * 0'
+    - cron: '41 3 * * 0'
   workflow_dispatch:
 
 jobs:

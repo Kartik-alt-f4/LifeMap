@@ -38,7 +38,8 @@ function computeRewards(task, config) {
   return { xp, gold }
 }
 
-const BLOCK_END_HOURS = { morning:12, noon:14, evening:19, night:23, midnight:6 }
+const BLOCK_END_HOURS   = { morning:12, noon:14, evening:19, night:23, midnight:6 }
+const BLOCK_START_HOURS = { morning:6,  noon:12, evening:14, night:19, midnight:23 }
 
 function isOverdue(task) {
   if (task.status !== 'pending') return false
@@ -52,6 +53,32 @@ function isOverdue(task) {
     if (blockEnd) return estHour >= blockEnd
   }
   return false
+}
+
+// Minutes-since-midnight EST — a single comparable scale for both an exact
+// scheduled_at and a coarse time_block, so "next up" can sort them together.
+// Tasks with neither sort last within whatever tier they're in.
+function timeKeyMinutes(task) {
+  if (task.scheduled_at) {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hour12: false
+    }).formatToParts(new Date(task.scheduled_at))
+    const hour = parseInt(parts.find(p => p.type === 'hour').value.replace('24','0'), 10)
+    const min  = parseInt(parts.find(p => p.type === 'minute').value, 10)
+    return hour * 60 + min
+  }
+  if (task.time_block && task.time_block in BLOCK_START_HOURS) {
+    return BLOCK_START_HOURS[task.time_block] * 60
+  }
+  return Infinity
+}
+
+// Sort tiers: pending-and-on-time first (soonest on top), then resolved
+// (completed/skipped), then missed (pending but overdue) at the very bottom.
+function taskTier(task) {
+  if (task.status === 'completed' || task.status === 'skipped') return 1
+  if (isOverdue(task)) return 2
+  return 0
 }
 
 // mobileView: undefined (desktop) | 'today' | 'chat'
@@ -123,9 +150,9 @@ export default function Dashboard({ playerState, config, onRefresh, mobileView }
   const nextTask = tasks?.find(t => t.status === 'pending' && !isOverdue(t))
     ?? tasks?.find(t => t.status === 'pending')
   const sorted = tasks ? [...tasks].sort((a, b) => {
-    if (a.status === 'completed' && b.status !== 'completed') return 1
-    if (a.status !== 'completed' && b.status === 'completed') return -1
-    return 0
+    const tierDiff = taskTier(a) - taskTier(b)
+    if (tierDiff !== 0) return tierDiff
+    return timeKeyMinutes(a) - timeKeyMinutes(b)
   }) : []
 
   // ── Task panel (shared between desktop left col and mobile today tab) ──
