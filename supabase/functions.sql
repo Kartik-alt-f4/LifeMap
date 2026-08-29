@@ -1,6 +1,10 @@
 -- ═══════════════════════════════════════════════════════════════════════════
 -- Life Map v2 — functions.sql
 -- Run after schema.sql.
+--
+-- Before running the SUPABASE-NATIVE CRON SCHEDULER section near the bottom
+-- of this file, edit its two vault.create_secret() calls to your own Render
+-- URL and CRON_SECRET — everything else in this file is deployment-generic.
 -- ═══════════════════════════════════════════════════════════════════════════
 
 
@@ -393,7 +397,7 @@ $$;
 -- (already locked in by that day's EOD rollover) and does NOT drain energy
 -- (current capacity, not something a past action can retroactively cost).
 -- App computes flat XP/gold with no streak multiplier before calling — see
--- rpgEngine.js and the comment in migrations/008_retro_task_completion.sql.
+-- rpgEngine.js and the comment in .migrations/008_retro_task_completion.sql.
 
 CREATE OR REPLACE FUNCTION log_past_task(
   p_title          text,
@@ -458,3 +462,94 @@ EXCEPTION WHEN OTHERS THEN
   RAISE;
 END;
 $$;
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- ── SUPABASE-NATIVE CRON SCHEDULER ────────────────────────────────────────
+-- Fires /cron/morning, /cron/eod, /cron/remind, /cron/cleanup, and /health
+-- entirely from inside this database, on a schedule, via pg_cron + pg_net.
+--
+-- Why here instead of GitHub Actions: GitHub's scheduled workflows are a
+-- shared queue across every GitHub user — under load, personal/free accounts
+-- get delayed or dropped, sometimes by hours (measured directly on this
+-- project: a daily cron landing 10-12h late, and a 14-minute health ping
+-- actually firing every 8-13 *hours*). pg_cron is a background worker inside
+-- this project's own dedicated Postgres instance, not competing with anyone
+-- else's jobs — architecturally closer to a systemd timer than a shared
+-- cloud scheduler. The .github/workflows/*.yml files still exist as harmless
+-- redundant backups (everything below is idempotency-guarded server-side)
+-- but this is the primary, reliability-critical trigger source.
+--
+-- The Render URL and CRON_SECRET live in Supabase Vault, not hardcoded into
+-- the job SQL — that's what makes cron_trigger()/cron_ping_health() reusable
+-- as-is for any deployment: only the two vault.create_secret() calls below
+-- change per install, nothing else in this section does.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- ▼▼▼ EDIT THESE TWO LINES for your own deployment before running ▼▼▼
+-- render_url  = your own Render service URL (no trailing slash)
+-- cron_secret = the same value you set as CRON_SECRET in Render's env vars
+--
+-- Guarded so re-running this file is safe — vault.create_secret() isn't
+-- idempotent by name on its own, and a duplicate 'render_url'/'cron_secret'
+-- would break the SELECT ... INTO lookups in cron_trigger() below.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM vault.decrypted_secrets WHERE name = 'render_url') THEN
+    PERFORM vault.create_secret('https://your-name.onrender.com', 'render_url');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM vault.decrypted_secrets WHERE name = 'cron_secret') THEN
+    PERFORM vault.create_secret('the-secret-you-set-in-render', 'cron_secret');
+  END IF;
+END $$;
+-- ▲▲▲ ------------------------------------------------------------- ▲▲▲
+
+-- Generic, reusable authenticated trigger — every /cron/* route needs the
+-- same x-cron-secret header, so one function parameterized by path covers
+-- morning/eod/remind/cleanup. Async (pg_net queues the request and returns
+-- immediately) — cron jobs don't need to wait on the response.
+CREATE OR REPLACE FUNCTION cron_trigger(p_path text)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, vault, net
+AS $$
+DECLARE
+  v_url    text;
+  v_secret text;
+BEGIN
+  SELECT decrypted_secret INTO v_url    FROM vault.decrypted_secrets WHERE name = 'render_url';
+  SELECT decrypted_secret INTO v_secret FROM vault.decrypted_secrets WHERE name = 'cron_secret';
+
+  PERFORM net.http_post(
+    url     := v_url || p_path,
+    headers := jsonb_build_object('x-cron-secret', v_secret, 'Content-Type', 'application/json'),
+    body    := '{}'::jsonb
+  );
+END;
+$$;
+
+-- Health ping has no auth — separate, simpler function.
+CREATE OR REPLACE FUNCTION cron_ping_health()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, vault, net
+AS $$
+DECLARE
+  v_url text;
+BEGIN
+  SELECT decrypted_secret INTO v_url FROM vault.decrypted_secrets WHERE name = 'render_url';
+  PERFORM net.http_get(v_url || '/health');
+END;
+$$;
+
+-- Canonical times, matching config/server.json's cron.*_utc values exactly.
+-- No redundant offset-attempts needed here the way the GitHub Actions
+-- workflows had — pg_cron isn't subject to the same external-queue
+-- congestion those were compensating for.
+select cron.schedule('render-health-ping', '*/10 * * * *', $$select cron_ping_health()$$);
+select cron.schedule('render-morning',     '0 11 * * *',   $$select cron_trigger('/cron/morning')$$);
+select cron.schedule('render-eod',         '0 3 * * *',    $$select cron_trigger('/cron/eod')$$);
+select cron.schedule('render-remind',      '*/15 * * * *', $$select cron_trigger('/cron/remind')$$);
+select cron.schedule('render-cleanup',     '0 3 * * 0',    $$select cron_trigger('/cron/cleanup')$$);

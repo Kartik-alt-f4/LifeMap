@@ -2,11 +2,21 @@
 -- Life Map v2 — schema.sql
 -- Single source of truth. Run against a fresh Supabase project.
 -- After running this file, run functions.sql then seed.sql.
+--
+-- These 3 files are self-sufficient — a fresh project needs nothing from
+-- supabase/.migrations/ (those exist only to bring an EXISTING pre-2026-08-29
+-- project up to date; a new install already has everything they'd add).
 -- ═══════════════════════════════════════════════════════════════════════════
 
 -- ── EXTENSIONS ───────────────────────────────────────────────────────────────
 CREATE EXTENSION IF NOT EXISTS vector;
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
+-- pg_cron + pg_net: the Supabase-native cron scheduler (fires morning/EOD/
+-- remind/cleanup and keeps Render warm) lives entirely inside this database —
+-- see the bottom of functions.sql for why this replaced GitHub Actions as the
+-- reliability-critical trigger source.
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+CREATE EXTENSION IF NOT EXISTS pg_net;
 
 
 -- ── PLAYER STATE (single row, id = 1) ────────────────────────────────────────
@@ -38,7 +48,7 @@ CREATE TABLE daily_state (
   eod_ran           bool    NOT NULL DEFAULT false,
   day_off_granted       bool    NOT NULL DEFAULT false,
   free_leisure_today    bool    NOT NULL DEFAULT false,
-  -- Cron watchdog — see migrations/009_cron_watchdog.sql for why these are
+  -- Cron watchdog — see .migrations/009_cron_watchdog.sql for why these are
   -- separate from morning_ran/eod_ran (which flip meaning across the day
   -- boundary and aren't safe to compare against real clock time).
   last_morning_run_at   timestamptz,

@@ -40,8 +40,17 @@ export async function runMorning() {
   // cron fell behind and daily_state.date lags the real calendar date.
   const today = state.date
 
-  // 1. Spawn today's task instances from templates
-  const { data: spawned } = await supabase.rpc('spawn_template_instances', { p_date: today })
+  // 1. Spawn task instances from templates — today plus the next 6 days, so
+  // the coming week is already visible/navigable instead of materializing
+  // one day at a time as each morning arrives. spawn_template_instances()
+  // skips a template+date pair that already has an instance, so re-running
+  // it for days already spawned on a previous morning is a safe no-op —
+  // this only ever adds the one new day rolling off the end of the window.
+  let spawned = 0
+  for (let i = 0; i < 7; i++) {
+    const { data: n } = await supabase.rpc('spawn_template_instances', { p_date: addDays(today, i) })
+    spawned += n ?? 0
+  }
 
   // 2. Passive energy regen
   const { passive_morning_regen } = getGame().energy
@@ -334,7 +343,7 @@ export async function runCleanup() {
 // a real execution, never on an idempotency-skip) rather than
 // daily_state.morning_ran/eod_ran, which flip meaning across the day
 // boundary and aren't safe to compare against real clock time — see
-// migrations/009_cron_watchdog.sql.
+// supabase/.migrations/009_cron_watchdog.sql.
 const MORNING_EXPECTED_UTC_HOUR = 11
 const EOD_EXPECTED_UTC_HOUR     = 3
 const WATCHDOG_GRACE_HOURS      = 1

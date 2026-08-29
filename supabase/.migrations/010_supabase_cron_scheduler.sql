@@ -3,9 +3,8 @@
 -- any external ping service as the reliability-critical trigger source)
 --
 -- Run this against an EXISTING Supabase project. A fresh project created from
--- the current schema.sql does NOT have this yet — see the note in schema.sql
--- once it's folded in there (tracked as a follow-up, along with removing the
--- GitHub Actions workflows once this has proven itself).
+-- the current schema.sql + functions.sql already has this — do not run it
+-- there.
 --
 -- Why: GitHub Actions' scheduled workflows are a shared queue across every
 -- GitHub user — under load, personal/free accounts get delayed or dropped,
@@ -27,9 +26,19 @@ create extension if not exists pg_cron;
 create extension if not exists pg_net;
 
 -- Replace these two with the new deployment's own Render URL and CRON_SECRET
--- (the same value set on that Render service's CRON_SECRET env var).
-select vault.create_secret('https://lifemap-b0ms.onrender.com', 'render_url');
-select vault.create_secret('<your CRON_SECRET value>',          'cron_secret');
+-- (the same value set on that Render service's CRON_SECRET env var). Guarded
+-- so re-running this file is safe — vault.create_secret() isn't idempotent
+-- by name on its own, and a duplicate would break the SELECT ... INTO
+-- lookups in cron_trigger() below.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM vault.decrypted_secrets WHERE name = 'render_url') THEN
+    PERFORM vault.create_secret('https://lifemap-b0ms.onrender.com', 'render_url');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM vault.decrypted_secrets WHERE name = 'cron_secret') THEN
+    PERFORM vault.create_secret('<your CRON_SECRET value>', 'cron_secret');
+  END IF;
+END $$;
 
 create or replace function cron_trigger(p_path text)
 returns void
