@@ -21,7 +21,7 @@
   },
 
   "cron": {
-    "_comment": "Documentation only — nothing reads these at runtime. The real schedule is Supabase pg_cron (supabase/.migrations/010_supabase_cron_scheduler.sql — cron.job table, jobs render-health-ping/render-morning/render-eod/render-remind/render-cleanup), which calls these exact times directly via pg_net. The .github/workflows/*.yml files still exist as redundant backup triggers (harmless, everything here is idempotency-guarded) but are no longer the primary source — they were unreliable under GitHub's shared scheduler, see those files' comments.",
+    "_comment": "Documentation only — nothing reads these at runtime. The real schedule is Supabase pg_cron (supabase/.migrations/010_supabase_cron_scheduler.sql — cron.job table, jobs render-health-ping/render-morning/render-eod/render-remind/render-cleanup), which calls these exact times directly via pg_net. The GitHub Actions workflow equivalents were removed from the repo on 2026-08-29 (one of them fired ~7 hours late and closed out a day minutes after it began, proving the backup wasn't actually harmless) — this is now the only trigger source.",
     "morning_utc":          "0 11 * * *",
     "eod_utc":              "0 3 * * *",
     "remind_interval_min":  15,

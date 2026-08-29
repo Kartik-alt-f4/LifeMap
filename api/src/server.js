@@ -459,7 +459,7 @@ app.post('/register', async (req, res) => {
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CRON ENDPOINTS (GitHub Actions only)
+// CRON ENDPOINTS (called by Supabase pg_cron — see functions.sql)
 // ─────────────────────────────────────────────────────────────────────────────
 app.post('/cron/morning', cronAuth, async (_, res) => {
   try { res.json(await runMorning()) }

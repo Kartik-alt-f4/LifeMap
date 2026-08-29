@@ -476,9 +476,11 @@ $$;
 -- actually firing every 8-13 *hours*). pg_cron is a background worker inside
 -- this project's own dedicated Postgres instance, not competing with anyone
 -- else's jobs — architecturally closer to a systemd timer than a shared
--- cloud scheduler. The .github/workflows/*.yml files still exist as harmless
--- redundant backups (everything below is idempotency-guarded server-side)
--- but this is the primary, reliability-critical trigger source.
+-- cloud scheduler. The GitHub Actions workflow equivalents of these jobs were
+-- removed from the repo on 2026-08-29 after one of them (eod.yml) fired ~7
+-- hours late and closed out a day only minutes after it began — keeping them
+-- as a "harmless" backup turned out not to be harmless once this scheduler
+-- was actually live. This is now the only trigger source.
 --
 -- The Render URL and CRON_SECRET live in Supabase Vault, not hardcoded into
 -- the job SQL — that's what makes cron_trigger()/cron_ping_health() reusable

@@ -145,7 +145,7 @@ edit, hit **Save & re-embed**, no script needed.
 
 GitHub Actions secrets, a separate Firebase project, manually seeding stat
 embeddings via script, or running anything from `supabase/.migrations/` — all
-either automated by the wizard now or no longer load-bearing. GitHub Actions
-workflows still exist in the repo as harmless redundant backups, but the
-Supabase-native scheduler set up in step 4 is what actually keeps things
+either automated by the wizard now or no longer load-bearing. There's no
+GitHub Actions cron at all anymore — the Supabase-native scheduler set up in
+step 4 is the only trigger source, and it's what actually keeps things
 reliable.

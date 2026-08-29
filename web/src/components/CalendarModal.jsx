@@ -28,8 +28,8 @@ export default function CalendarModal({ onClose, onSelectDate }) {
   const monthName = new Date(year, month - 1, 1).toLocaleDateString('en-US', { month:'short', year:'numeric' })
 
   return (
-    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ width: 'min(480px, calc(100vw - 32px))', maxHeight:'auto' }}>
+    <div className="modal-overlay calendar-modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal calendar-modal" style={{ width: 'min(480px, calc(100vw - 32px))', maxHeight:'auto' }}>
         <div className="modal-header">
           <span className="modal-title">Calendar</span>
           <div className="cal-nav">

@@ -138,13 +138,17 @@ export default function Dashboard({ playerState, config, onRefresh, mobileView }
     } finally { setSending(false) }
   }
 
-  const nextTask = tasks?.find(t => t.status === 'pending' && !isOverdue(t))
-    ?? tasks?.find(t => t.status === 'pending')
   const sorted = tasks ? [...tasks].sort((a, b) => {
     const tierDiff = taskTier(a) - taskTier(b)
     if (tierDiff !== 0) return tierDiff
     return timeKeyMinutes(a) - timeKeyMinutes(b)
   }) : []
+  // "Next up" is literally the top of the sorted list — same tiering (pending
+  // on-time first, then missed) already used to order the list below, not a
+  // separately-derived pick. Shown once up top, so it's excluded from the
+  // list itself rather than appearing twice.
+  const nextTask  = sorted.find(t => t.status === 'pending')
+  const listTasks = sorted.filter(t => t.id !== nextTask?.id)
 
   // ── Task panel (shared between desktop left col and mobile today tab) ──
   const taskPanel = (
@@ -219,7 +223,7 @@ export default function Dashboard({ playerState, config, onRefresh, mobileView }
             [0,1,2].map(i => <div key={i} className="skeleton" />)
           ) : sorted.length === 0 ? (
             <div className="empty-state">No tasks for this day.</div>
-          ) : sorted.map(task => {
+          ) : listTasks.map(task => {
             const { xp, gold } = computeRewards(task, config)
             const done    = task.status === 'completed'
             const urgent  = isOverdue(task)

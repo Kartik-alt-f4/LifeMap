@@ -1,5 +1,6 @@
 // cronJobs.js — morning, EOD, reminder, cleanup handlers
-// Called by GitHub Actions via authenticated POST endpoints.
+// Called by Supabase pg_cron via authenticated POST endpoints (functions.sql's
+// "SUPABASE-NATIVE CRON SCHEDULER" section) — see CLAUDE.md's "Cron" notes.
 
 import { supabase }       from './supabaseClient.js'
 import { postToDiscord }  from './discordBot.js'

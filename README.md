@@ -2,7 +2,7 @@
 
 A personal RPG task manager. Complete tasks, earn XP and gold, track stats and skills via embedding-based projection. Talk to it in plain English.
 
-**Stack:** Node.js + Express · Supabase (Postgres + pgvector) · Gemini API · React + Vite · Discord bot · GitHub Actions cron
+**Stack:** Node.js + Express · Supabase (Postgres + pgvector, incl. native `pg_cron`) · Gemini API · React + Vite · Discord bot
 
 ---
 
@@ -12,7 +12,6 @@ A personal RPG task manager. Complete tasks, earn XP and gold, track stats and s
 - A [Supabase](https://supabase.com) project (free tier works)
 - A [Google AI Studio](https://aistudio.google.com) API key (Gemini)
 - A [Render](https://render.com) account (free tier works)
-- A GitHub account (for cron jobs via Actions)
 
 Discord is optional but recommended for mobile access without the app.
 
@@ -156,28 +155,13 @@ curl https://your-app.onrender.com/state
 
 ---
 
-## 7. GitHub Actions (cron jobs)
+## 7. Cron (morning briefings, EOD, reminders, cleanup)
 
-The workflows in `.github/workflows/` handle morning briefings, EOD summaries, task reminders, and server keepalive pings. They need two secrets.
-
-Go to your GitHub repo → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**:
-
-| Secret | Value |
-|--------|-------|
-| `SERVER_URL` | Your Render URL, e.g. `https://lifemap.onrender.com` |
-| `CRON_SECRET` | The same string you set in Render env vars |
-
-### What each workflow does
-
-| Workflow | Schedule | Purpose |
-|----------|----------|---------|
-| `health.yml` | Every 14 min | Keeps Render free tier from sleeping |
-| `morning.yml` | 11:00 UTC (6am EST) | Spawns today's tasks, sends briefing |
-| `eod.yml` | 03:00 UTC (10pm EST) | Closes the day, updates streak, snapshots |
-| `remind.yml` | Every 15 min | Pings for tasks due soon |
-| `cleanup.yml` | Weekly Sunday | Purges old conversation sessions |
-
-> To change cron times, edit the `cron:` field in each `.yml` file. Times are in UTC.
+Handled by a Supabase-native scheduler (`pg_cron` + `pg_net`), set up automatically as
+part of `functions.sql` — no GitHub Actions, no third-party cron account. See
+[SETUP.md](SETUP.md) steps 4-5 for the full walkthrough, including the one manual step
+(pointing it at your own Render URL/`CRON_SECRET` via two `vault.update_secret(...)`
+calls).
 
 ---
 
@@ -225,7 +209,6 @@ node ../scripts/reset.js --hard
 
 ```
 lifemap/
-├── .github/workflows/    Cron job definitions (GitHub Actions)
 ├── api/
 │   ├── src/
 │   │   ├── server.js         Express app + all routes
@@ -261,15 +244,10 @@ lifemap/
 
 ---
 
-## Forking for personal use
+## Deploying your own
 
-1. Fork the repo
-2. Create your own Supabase project and run the SQL files
-3. Get a Google AI Studio key
-4. Run `embed-seed.js` to generate stat embeddings
-5. Deploy to Render and set env vars
-6. Add GitHub secrets for cron jobs
-7. Open Settings and enrich stat descriptions for better tracking
+See [SETUP.md](SETUP.md) for the full walkthrough — no fork needed, Render can deploy
+this repo's Blueprint directly.
 
 All game mechanics (XP values, energy, ranks, skill thresholds) are editable in `config/game.json` or via the Settings page. No code changes needed for tuning.
 
