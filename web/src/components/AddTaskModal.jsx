@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { createTask, createTemplate } from '../api.js'
+import { todayEST } from '../dateUtils.js'
 
 const TYPES        = ['anchor','mandatory','project','bonus','habit','routine']
 const PRIORITIES   = ['P0','P1','P2','P3']
@@ -7,8 +8,6 @@ const DIFFICULTIES = ['low','medium','high']
 const TIME_BLOCKS  = ['morning','noon','evening','night','midnight']
 const RECURRENCES  = ['daily','weekdays','weekends','weekly']
 const WEEKDAYS     = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'] // index = recurrence_day_of_week (0=Sun, matches Postgres DOW)
-
-function todayStr() { return new Date().toISOString().split('T')[0] }
 
 export default function AddTaskModal({ config, onClose, onAdded }) {
   const [title,        setTitle]       = useState('')
@@ -21,7 +20,7 @@ export default function AddTaskModal({ config, onClose, onAdded }) {
   const [recurDow,     setRecurDow]    = useState(new Date().getDay())
   const [isRecovery,   setRecovery]    = useState(false)
   const [useSchedule,  setUseSchedule] = useState(false)
-  const [schedDate,    setSchedDate]   = useState(todayStr())
+  const [schedDate,    setSchedDate]   = useState(todayEST())
   const [schedTime,    setSchedTime]   = useState('')
   const [description,  setDescription] = useState('')
   const [submitting,   setSubmitting]  = useState(false)

@@ -1,27 +1,18 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { getTasks, completeTask, skipTask, cancelTask, chat } from '../api.js'
+import { todayEST, addDays } from '../dateUtils.js'
 import AddTaskModal  from '../components/AddTaskModal.jsx'
 import TaskDrawer    from '../components/TaskDrawer.jsx'
 import CalendarModal from '../components/CalendarModal.jsx'
 
 const TYPE_ICONS = { anchor:'⚓', mandatory:'⚔', project:'📋', bonus:'⭐', habit:'🔄', routine:'🌿' }
 
-function todayStr() { return new Date().toISOString().split('T')[0] }
-
 function formatDate(d) {
-  const date  = new Date(d + 'T00:00:00')
-  const today = new Date(); today.setHours(0,0,0,0)
-  const diff  = Math.round((date - today) / 86400000)
-  if (diff === 0)  return 'Today'
-  if (diff === -1) return 'Yesterday'
-  if (diff === 1)  return 'Tomorrow'
-  return date.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' })
-}
-
-function shiftDate(d, days) {
-  const date = new Date(d + 'T00:00:00')
-  date.setDate(date.getDate() + days)
-  return date.toISOString().split('T')[0]
+  const today = todayEST()
+  if (d === today)             return 'Today'
+  if (d === addDays(today,-1)) return 'Yesterday'
+  if (d === addDays(today, 1)) return 'Tomorrow'
+  return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' })
 }
 
 function computeRewards(task, config) {
@@ -83,7 +74,7 @@ function taskTier(task) {
 
 // mobileView: undefined (desktop) | 'today' | 'chat'
 export default function Dashboard({ playerState, config, onRefresh, mobileView }) {
-  const [date,      setDate]      = useState(todayStr())
+  const [date,      setDate]      = useState(todayEST())
   const [tasks,     setTasks]     = useState(null)
   const [loading,   setLoading]   = useState(true)
   const [selected,  setSelected]  = useState(null)
@@ -93,12 +84,12 @@ export default function Dashboard({ playerState, config, onRefresh, mobileView }
   const [chatInput, setChatInput] = useState('')
   const [sending,   setSending]   = useState(false)
   const messagesEnd = useRef(null)
-  const isToday     = date === todayStr()
+  const isToday     = date === todayEST()
 
   const loadTasks = useCallback(async (d) => {
     setLoading(true)
     try {
-      const data = await getTasks(d === todayStr() ? undefined : d)
+      const data = await getTasks(d === todayEST() ? undefined : d)
       setTasks(data)
     } catch (e) { console.error(e) }
     finally { setLoading(false) }
@@ -116,7 +107,7 @@ export default function Dashboard({ playerState, config, onRefresh, mobileView }
     messagesEnd.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  const goDate = (days) => setDate(d => shiftDate(d, days))
+  const goDate = (days) => setDate(d => addDays(d, days))
 
   const handleComplete = async (taskId) => {
     try { await completeTask(taskId); await loadTasks(date); await onRefresh(); setSelected(null) }

@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { getCalendar } from '../api.js'
-
-function todayStr() { return new Date().toISOString().split('T')[0] }
+import { todayEST } from '../dateUtils.js'
 
 export default function CalendarModal({ onClose, onSelectDate }) {
   const now = new Date()
@@ -25,7 +24,7 @@ export default function CalendarModal({ onClose, onSelectDate }) {
   const firstDay = new Date(year, month - 1, 1).getDay()
   const offset   = firstDay === 0 ? 6 : firstDay - 1
   const daysInMonth = new Date(year, month, 0).getDate()
-  const today    = todayStr()
+  const today    = todayEST()
   const monthName = new Date(year, month - 1, 1).toLocaleDateString('en-US', { month:'short', year:'numeric' })
 
   return (
