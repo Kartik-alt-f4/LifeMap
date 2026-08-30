@@ -4,6 +4,7 @@
 import { supabase } from './supabaseClient.js'
 import { todayEST, estNaiveToUTC } from './dateUtils.js'
 import { detectConflict, findAlternativeBlock } from './scheduleEngine.js'
+import { getGame } from './configLoader.js'
 
 // ── Player state ──────────────────────────────────────────────────────────────
 export async function getPlayerState() {
@@ -80,8 +81,14 @@ export async function getPendingTasksForDate(dateStr) {
 // when the day closes. Closes out the old row and inserts a fresh one for
 // newDateStr, preserving carryPenalized so a mandatory task's one-time penalty
 // (applied separately, before this is called) isn't re-triggered on later nights.
+// The old row's status is user-configurable (game.json tasks.carry_visible):
+// 'skipped' keeps it visible on its original day (getTasksForDate() only
+// excludes 'cancelled') so a carried task's history doesn't just vanish;
+// 'cancelled' is the quieter old behaviour — same row hidden, only the fresh
+// carried copy shows up, on newDateStr.
 export async function carryTaskForward(task, newDateStr, carryPenalized) {
-  await cancelTask(task.id)
+  const closeOut = getGame().tasks.carry_visible ? skipTask : cancelTask
+  await closeOut(task.id)
   const { data, error } = await supabase
     .from('task')
     .insert({
@@ -480,13 +487,16 @@ export async function getCalendar(monthStr) {
     if (!days[d]) days[d] = { total: 0, completed: 0, skipped: 0, pending: 0 }
     days[d].total++
     if (task.status === 'completed') days[d].completed++
-    else if (task.status === 'skipped') days[d].skipped++
-    // 'pending' here means "not completed that day" — covers genuinely
-    // pending tasks (today/future) AND 'cancelled' ones, which is what an
-    // EOD-carried mandatory/project/habit/bonus task becomes on the day it
-    // was carried FROM (see cronJobs.js runEod()). Excluding 'cancelled'
-    // outright used to make every carried task invisible on the calendar for
-    // its original day — this is deliberately inclusive instead.
+    // Written to work regardless of the carry_visible setting (see
+    // carryTaskForward()) — a carried task's old row can be either
+    // 'skipped' or 'cancelled' depending on it, and either way it's
+    // unresolved that day, not a definitive skip. Only anchor is a true
+    // terminal skip within this query (routine is already excluded above;
+    // mandatory/project/habit/bonus always carry, never terminally skip).
+    // 'cancelled' also covers genuine user-initiated cancellations
+    // (/tasks/:id/cancel) — bucketing those as 'pending' too matches this
+    // function's pre-existing behaviour for that case.
+    else if (task.status === 'skipped' && task.task_type === 'anchor') days[d].skipped++
     else days[d].pending++
   }
   return days

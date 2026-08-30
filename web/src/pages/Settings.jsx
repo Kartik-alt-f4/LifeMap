@@ -26,14 +26,15 @@ export default function Settings({ config, onSaved }) {
   )
 
   const g = config.game
-  const [xpBase,   setXpBase]   = useState({ ...g.tasks.xp_base })
-  const [goldBase, setGoldBase] = useState({ ...g.tasks.gold_base })
-  const [energy,   setEnergy]   = useState({ ...g.energy })
+  const [xpBase,      setXpBase]      = useState({ ...g.tasks.xp_base })
+  const [goldBase,    setGoldBase]    = useState({ ...g.tasks.gold_base })
+  const [energy,      setEnergy]      = useState({ ...g.energy })
+  const [carryVisible, setCarryVisible] = useState(g.tasks.carry_visible ?? true)
 
   const save = async () => {
     setSaving(true)
     try {
-      await saveConfig('game', 'tasks',  { ...g.tasks, xp_base: xpBase, gold_base: goldBase })
+      await saveConfig('game', 'tasks',  { ...g.tasks, xp_base: xpBase, gold_base: goldBase, carry_visible: carryVisible })
       await saveConfig('game', 'energy', energy)
       setSaved(true); setTimeout(() => setSaved(false), 2000)
       onSaved()
@@ -91,6 +92,18 @@ export default function Settings({ config, onSaved }) {
         style={readOnly ? { opacity: 0.5, cursor: 'default' } : {}}
         onChange={e => onChange?.(Number(e.target.value))}
       />
+    </div>
+  )
+
+  const Toggle = ({ label, hint, value, onChange }) => (
+    <div className="toggle-row">
+      <div>
+        <div className="setting-label">{label}</div>
+        {hint && <div className="setting-hint">{hint}</div>}
+      </div>
+      <div className={`toggle-track${value ? ' on' : ''}`} onClick={() => onChange(!value)}>
+        <div className="toggle-thumb" />
+      </div>
     </div>
   )
 
@@ -153,6 +166,15 @@ export default function Settings({ config, onSaved }) {
               {Object.entries(g.tasks.difficulty_xp_offset).map(([d, v]) => (
                 <Row key={d} label={d} value={v} readOnly hint="Edit in game.json" />
               ))}
+            </div>
+            <div className="settings-section">
+              <div className="settings-section-title">Carried-over tasks</div>
+              <Toggle
+                label="Keep visible on their original day"
+                hint="On: a carried mandatory/project/habit/bonus task still shows (marked Skipped) on the day it was missed. Off: it disappears from that day — only the fresh copy on the new day shows."
+                value={carryVisible}
+                onChange={setCarryVisible}
+              />
             </div>
           </>
         )}

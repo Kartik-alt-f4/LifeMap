@@ -54,7 +54,8 @@
       "high": 3
     },
     "gold_floor": 1,
-    "late_penalty_per_day": 0.9
+    "late_penalty_per_day": 0.9,
+    "carry_visible": true
   },
   "energy": {
     "max": 100,
