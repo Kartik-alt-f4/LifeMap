@@ -171,7 +171,7 @@ export default function Settings({ config, onSaved }) {
               <div className="settings-section-title">Carried-over tasks</div>
               <Toggle
                 label="Keep visible on their original day"
-                hint="On: a carried mandatory/project/habit/bonus task still shows (marked Skipped) on the day it was missed. Off: it disappears from that day — only the fresh copy on the new day shows."
+                hint="Applies to project/habit/bonus tasks that carry forward. On: still shows (marked Skipped) on the day it was missed. Off: disappears from that day — only the fresh copy on the new day shows. Anchor, routine, and mandatory always stay visible, regardless of this."
                 value={carryVisible}
                 onChange={setCarryVisible}
               />

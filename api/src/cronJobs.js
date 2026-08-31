@@ -118,11 +118,11 @@ export async function runEod() {
   // 1. Close out today's still-pending tasks, by type:
   //    - routine:  skipped, no carry, no penalty (a fresh instance spawns
   //                tomorrow anyway if it's templated)
-  //    - anchor:   skipped AND penalized once — it belongs to that day only,
-  //                doesn't carry forward
-  //    - mandatory: penalized once (only the first night its carry chain goes
-  //                incomplete — carry_penalized guards against re-penalizing
-  //                every subsequent night), then carries forward like the rest
+  //    - anchor / mandatory: skipped AND penalized once, terminal — both are
+  //                "sure shot" cases (an anchor's slot is just gone once the
+  //                day passes; a missed mandatory means you're already behind
+  //                and would have to redo it anyway, so auto-carrying it
+  //                forward doesn't actually help). Neither carries forward.
   //    - project / habit / bonus: carry forward, no penalty
   let runningPlayer = await getPlayerState()
   let penalizedCount = 0
@@ -135,7 +135,7 @@ export async function runEod() {
       continue
     }
 
-    if (task.task_type === 'anchor') {
+    if (task.task_type === 'anchor' || task.task_type === 'mandatory') {
       const { xp, gold }  = computeTaskRewards(task)
       const levelPenalty  = computeLevelPenalty(runningPlayer.level, runningPlayer.current_xp, xp)
       await applyTaskPenalty(task.id, xp, gold, levelPenalty)
@@ -145,17 +145,8 @@ export async function runEod() {
       continue
     }
 
-    // mandatory / project / habit / bonus — all carry forward
-    let carryPenalized = task.carry_penalized
-    if (task.task_type === 'mandatory' && !task.carry_penalized) {
-      const { xp, gold }  = computeTaskRewards(task)
-      const levelPenalty  = computeLevelPenalty(runningPlayer.level, runningPlayer.current_xp, xp)
-      await applyTaskPenalty(task.id, xp, gold, levelPenalty)
-      runningPlayer = { ...runningPlayer, level: levelPenalty.newLevel, current_xp: levelPenalty.newXp }
-      penalizedCount++
-      carryPenalized = true
-    }
-    await carryTaskForward(task, tomorrow, carryPenalized)
+    // project / habit / bonus — carry forward, no penalty
+    await carryTaskForward(task, tomorrow, false)
     carriedCount++
   }
 

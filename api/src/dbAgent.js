@@ -77,18 +77,38 @@ export async function getPendingTasksForDate(dateStr) {
 }
 
 // ── Carry a missed task forward to a new date ──────────────────────────────────
-// Used by the EOD cron for mandatory/project/habit/bonus tasks still incomplete
-// when the day closes. Closes out the old row and inserts a fresh one for
-// newDateStr, preserving carryPenalized so a mandatory task's one-time penalty
-// (applied separately, before this is called) isn't re-triggered on later nights.
+// Used by the EOD cron for project/habit/bonus tasks still incomplete when the
+// day closes — the only types that still carry (anchor, routine, and mandatory
+// are all terminal: one skip, one possible penalty, no carry — see cronJobs.js
+// runEod()). Closes out the old row and inserts a fresh one for newDateStr.
 // The old row's status is user-configurable (game.json tasks.carry_visible):
 // 'skipped' keeps it visible on its original day (getTasksForDate() only
 // excludes 'cancelled') so a carried task's history doesn't just vanish;
 // 'cancelled' is the quieter old behaviour — same row hidden, only the fresh
 // carried copy shows up, on newDateStr.
+//
+// If task is templated, newDateStr may already have its own naturally-spawned
+// instance — morning spawns 7 days ahead (see runMorning()), so by the time
+// EOD carries today's missed copy forward, tomorrow's regular occurrence has
+// often already been sitting there since this morning. Carrying forward
+// anyway would duplicate it. Same per-template-per-date dedupe check
+// spawn_template_instances() itself uses — if one's already there, leave it
+// alone instead of inserting a second.
 export async function carryTaskForward(task, newDateStr, carryPenalized) {
   const closeOut = getGame().tasks.carry_visible ? skipTask : cancelTask
   await closeOut(task.id)
+
+  if (task.template_id) {
+    const { data: existing, error: existingErr } = await supabase
+      .from('task')
+      .select('*')
+      .eq('template_id', task.template_id)
+      .eq('scheduled_for', newDateStr)
+      .maybeSingle()
+    if (existingErr) throw existingErr
+    if (existing) return existing
+  }
+
   const { data, error } = await supabase
     .from('task')
     .insert({
